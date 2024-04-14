@@ -1,0 +1,4 @@
+
+set -gx PROXY_SOCK_DSN "socks5://host:port"
+set -gx PROXY_HTTP_DSN "http://host:port"
+
