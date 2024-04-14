@@ -3,7 +3,7 @@
 ## Usage
 
 ```bash
-git clone ... ~/dotfiles
+git clone git@github.com:youguanxinqing/dotfiles.git ~/dotfiles
 cd ~/dotfiles/scripts/
 bash install [FLAG]
 ```
