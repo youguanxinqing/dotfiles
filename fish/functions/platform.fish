@@ -17,3 +17,11 @@ function get_my_platform
   end
 
 end
+
+function is_wsl2
+  if string match -q "*WSL2*" (cat /proc/version)
+    echo 1
+  else
+    echo 0
+  end
+end
