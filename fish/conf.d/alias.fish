@@ -2,7 +2,7 @@
 # alias for git
 abbr -a gits "git status"
 abbr -a gitd "git diff"
-abbr -a gitc "git commit -m"
+abbr -a gitc "git commit -m \"\""
 
 
 # alias for proxy
