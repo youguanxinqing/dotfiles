@@ -5,6 +5,12 @@ abbr -a gitd "git diff"
 abbr -a gitc "git commit -m \"\""
 
 
+# nvim copy
+if type -q xclip
+  abbr -a copy "xclip -selection c"
+end
+
+
 # alias for proxy
 set -l FISH_PROXY_FILE ~/.config/fish/conf.d/variables/proxy.fish
 if test -e $FISH_PROXY_FILE
