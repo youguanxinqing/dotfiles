@@ -20,8 +20,8 @@ end
 
 function is_wsl2
   if string match -q "*WSL2*" (cat /proc/version)
-    echo 1
+    echo "true"
   else
-    echo 0
+    echo "false"
   end
 end
