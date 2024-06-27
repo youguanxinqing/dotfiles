@@ -2,7 +2,7 @@ source ~/.config/fish/functions/platform.fish
 
 # set cdptah
 set -gx CDPATH .
-if test (is_wsl2) == "true"
+if test (is_wsl2) = "true"
     set -gx CDPATH $CDPATH ~/projects/
 else
   if test (get_my_platform) = "windows"

@@ -24,7 +24,7 @@ function load_py_env
 end
 
 # wsl2 gui
-if test (is_wsl2) == "true"
+if test (is_wsl2) = "true"
   set -gx DISPLAY $(awk '/nameserver/ {print $2}' /etc/resolv.conf):0.0
   set -gx LIBGL_ALWAYS_INDIRECT 1
 end
