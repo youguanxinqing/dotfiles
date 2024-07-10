@@ -6,8 +6,12 @@ return {
 	colors = colors,
 
 	-- font settings
-	font_size = 14.0,
-	font = wezterm.font("JetBrainsMono Nerd Font"),
+	font_size = 17.0,
+	-- font = wezterm.font("JetBrainsMono Nerd Font"),
+	font = wezterm.font_with_fallback({
+		{ family = "LXGW WenKai Mono", weight = "Bold" },
+		"JetBrainsMono Nerd Font",
+	}),
 
 	-- window settings
 	window_background_opacity = 0.9,
