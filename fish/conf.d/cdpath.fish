@@ -9,5 +9,7 @@ else
     set -gx CDPATH $CDPATH /mnt/d/code
   else if test (get_my_platform) = "linux"
     set -gx CDPATH $CDPATH ~/Public
+  else if test (get_my_platform) = "darwin"
+    set -gx CDPATH $CDPATH ~/Code
   end
 end
