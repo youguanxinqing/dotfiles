@@ -6,7 +6,7 @@ return {
 	colors = colors,
 
 	-- font settings
-	font_size = 17.0,
+	font_size = 17.5,
 	-- font = wezterm.font("JetBrainsMono Nerd Font"),
 	font = wezterm.font_with_fallback({
 		{ family = "LXGW WenKai Mono Screen" },
