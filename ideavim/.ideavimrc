@@ -1,0 +1,68 @@
+" .ideavimrc is a configuration file for IdeaVim plugin. It uses
+"   the same commands as the original .vimrc configuration.
+" You can find a list of commands here: https://jb.gg/h38q75
+" Find more examples here: https://jb.gg/share-ideavimrc
+
+
+"" -- Suggested options --
+" Show a few lines of context around the cursor. Note that this makes the
+" text scroll if you mouse-click near the start or end of the window.
+set scrolloff=5
+
+" Do incremental searching.
+set incsearch
+
+" Don't use Ex mode, use Q for formatting.
+map Q gq
+
+" --- Enable IdeaVim plugins https://jb.gg/ideavim-plugins
+
+" Highlight copied text
+Plug 'machakann/vim-highlightedyank'
+" Commentary plugin
+Plug 'tpope/vim-commentary'
+Plug 'easymotion/vim-easymotion'
+Plug 'tpope/vim-commentary'
+Plug 'preservim/nerdtree'
+
+
+"" -- Map IDE actions to IdeaVim -- https://jb.gg/abva4t
+"" Map \r to the Reformat Code action
+"map \r <Action>(ReformatCode)
+
+"" Map <leader>d to start debug
+"map <leader>d <Action>(Debug)
+
+"" Map \b to toggle the breakpoint on the current line
+"map \b <Action>(ToggleLineBreakpoint)
+
+let mapleader=" "
+
+set which-key
+set notimeout
+set timeoutlen=5000
+set easymotion
+set commentary
+
+nmap <TAB> <action>(NextTab)
+nmap <S-TAB> <action>(PreviousTab)
+
+"关闭当前标签页
+let g:WhichKeyDesc_CodeAndClose_CloseEditor = "<leader>x 关闭当前标签页"
+nmap <leader>x :action CloseEditor<CR>
+"关闭其他标签页
+let g:WhichKeyDesc_CodeAndClose_CloseAllEditorsButActive = "<leader>ax 关闭其他标签页"
+nmap <leader>ax :action CloseAllEditorsButActive<CR>
+
+nmap <C-s> <Action>(AceAction)
+nmap f <Action>(AceForwardAction)
+nmap F <Action>(AceBackwardAction)
+
+nmap <leader>sb :action Find<CR>
+nmap <leader>fw :action FindInPath<CR>
+
+nmap <C-n> :NERDTreeToggle<CR>
+nmap <leader>ff :NERDTreeFind<CR>
+
+let g:NERDTreeMapNewFile = "a"
+let g:NERDTreeMapNewDir = "A"
