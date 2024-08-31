@@ -22,7 +22,6 @@ Plug 'machakann/vim-highlightedyank'
 " Commentary plugin
 Plug 'tpope/vim-commentary'
 Plug 'easymotion/vim-easymotion'
-Plug 'tpope/vim-commentary'
 Plug 'preservim/nerdtree'
 
 
@@ -38,6 +37,7 @@ Plug 'preservim/nerdtree'
 
 let mapleader=" "
 
+set clipboard+=unnamed
 set which-key
 set notimeout
 set timeoutlen=5000
@@ -54,7 +54,7 @@ nmap <leader>x :action CloseEditor<CR>
 let g:WhichKeyDesc_CodeAndClose_CloseAllEditorsButActive = "<leader>ax 关闭其他标签页"
 nmap <leader>ax :action CloseAllEditorsButActive<CR>
 
-nmap <C-s> <Action>(AceAction)
+nmap <C-s> :action flash.search<CR>
 nmap f <Action>(AceForwardAction)
 nmap F <Action>(AceBackwardAction)
 
