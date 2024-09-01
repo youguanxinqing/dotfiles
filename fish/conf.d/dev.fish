@@ -10,6 +10,10 @@ set -gx PATH $PATH $HOME/go/bin/
 set -gx PATH $PATH $HOME/.cargo/bin/
 set -gx RUSTUP_DIST_SERVER https://rsproxy.cn
 set -gx RUSTUP_UPDATE_ROOT https://rsproxy.cn/rustup
+set -l RUST_ENV_FILE "$HOME/.cargo/env.fish"
+if test -e $RUST_ENV_FILE
+  source $RUST_ENV_FILE
+end
 
 # Js: fnm (https://github.com/Schniz/fnm)
 set PATH $PATH "$HOME/.local/share/fnm" 
