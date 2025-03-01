@@ -1,0 +1,15 @@
+{
+  "venv": "3.8.20",
+  "venvPath": "path-to-/.pyenv/version",
+  "extraPaths": [
+    "path-to-your-project-root-dir"
+  ],
+  "reportAttributeAccessIssue": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportOptionalSubscript": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportArgumentType": "none",
+  "reportAssignmentType": "none",
+  "reportInvalidTypeArguments": "none",
+  "reportCallIssue": "none"
+}
