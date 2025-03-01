@@ -11,5 +11,6 @@ else
     set -gx CDPATH $CDPATH ~/Public
   else if test (get_my_platform) = "darwin"
     set -gx CDPATH $CDPATH ~/Code
+    set -gx CDPATH $CDPATH ~/projects
   end
 end
