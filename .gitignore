@@ -2,3 +2,4 @@ fish/conf.d/variables/proxy.fish
 !fish/conf.d/variables/proxy.fish.template
 
 config/private_remote/
+sync-note.log
