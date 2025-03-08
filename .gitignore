@@ -3,3 +3,4 @@ fish/conf.d/variables/proxy.fish
 
 config/private_remote/
 sync-note.log
+.DS_Store

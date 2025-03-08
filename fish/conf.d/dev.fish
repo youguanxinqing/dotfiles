@@ -38,5 +38,5 @@ end
 
 # load binary path for macos
 if test (get_my_platform) = "darwin"
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+  eval "$(/usr/local/bin/brew shellenv)"
 end
