@@ -35,6 +35,14 @@ if test (is_wsl2) = "true"
   set -gx LIBGL_ALWAYS_INDIRECT 1
 end
 
+set -l FLUTTER_ROOT "$HOME/tools/flutter/"
+set -l FLUTTER_BIN "$HOME/tools/flutter/bin"
+if test -e $FLUTTER_BIN
+  set -gx PUB_HOSTED_URL "https://pub.flutter-io.cn"
+  set -gx FLUTTER_STORAGE_BASE_URL "https://storage.flutter-io.cn"
+  set PATH $PATH $FLUTTER_BIN
+end
+
 # load binary path for macos
 if test (get_my_platform) = "darwin"
   if test (command_exists /opt/homebrew/bin/brew) = "true"
