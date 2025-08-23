@@ -55,6 +55,14 @@ else
     echo "fnm is already installed"
 fi
 
+# Install just if not already installed
+if ! command_exists just; then
+    echo "Installing just..."
+    cargo install just
+else
+    echo "just is already installed"
+fi
+
 # Install delta if not already installed
 if ! command_exists delta; then
     echo "Installing delta..."
@@ -76,6 +84,8 @@ if ! command_exists fzf; then
 else
     echo "fzf is already installed"
 fi
+
+# TODO install uv
 
 echo "All dependencies installation completed!"
 

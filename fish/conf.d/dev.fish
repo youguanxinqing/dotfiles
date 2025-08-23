@@ -53,3 +53,7 @@ if test (get_my_platform) = "darwin"
     echo "brew not found"
   end
 end
+
+# for uv
+source "$HOME/.local/bin/env.fish"
+uv generate-shell-completion fish | source
