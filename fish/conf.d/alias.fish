@@ -35,3 +35,7 @@ if test -e $FISH_PROXY_FILE
     set -e  https_proxy; \
     set -e  HTTPS_PROXY"
 end
+
+abbr -a z "zellij"
+abbr -a za "zellij attach"
+abbr -a zls "zellij ls"
