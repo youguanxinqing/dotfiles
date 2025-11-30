@@ -7,3 +7,4 @@ config/private_remote/
 
 sync-note.sh
 sync-note.log
+fish/conf.d/lb.fish

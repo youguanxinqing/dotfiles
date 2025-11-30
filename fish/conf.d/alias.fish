@@ -39,3 +39,10 @@ end
 abbr -a z "zellij"
 abbr -a za "zellij attach"
 abbr -a zls "zellij ls"
+
+# quick edit fish root
+abbr -a edit-fish "cd ~/.config/fish && nvim"
+# quick edit the single fish file for lb
+abbr -a edit-lb-fish "nvim ~/.config/fish/conf.d/lb.fish"
+# quick edit nvim root
+abbr -a edit-nvim "cd ~/.config/nvim && nvim"
