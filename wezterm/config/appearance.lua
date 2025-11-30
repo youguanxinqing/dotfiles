@@ -1,17 +1,17 @@
 local wezterm = require("wezterm")
 local colors = require("colors.custom")
 
-return {
+local _config = {
 	color_scheme = "Atlas (base16)",
 	colors = colors,
 
 	-- font settings
-	font_size = 17.5,
+	font_size = 17,
 	-- font = wezterm.font("JetBrainsMono Nerd Font"),
 	font = wezterm.font_with_fallback({
 		{ family = "LXGW WenKai Mono Screen" },
 		-- { family = "LXGW WenKai Mono", weight = "Bold" },
-		"JetBrainsMono Nerd Font",
+		"JetBrainsMono Nerd Font Mono",
 	}),
 
 	-- window settings
@@ -28,3 +28,5 @@ return {
 	enable_tab_bar = true,
 	tab_max_width = 50,
 }
+
+return _config
