@@ -14,7 +14,7 @@ end
 # alias for proxy
 set -l FISH_PROXY_FILE ~/.config/fish/conf.d/variables/proxy.fish
 if test -e $FISH_PROXY_FILE
-  source ~/.config/fish/conf.d/variables/proxy.fish
+  source $FISH_PROXY_FILE
   alias proxy-git="git config --global http.proxy $PROXY_SOCK_DSN; \
     git config --global https.proxy $PROXY_SOCK_DSN"
   alias unproxy-git="git config --global --unset http.proxy; \
@@ -49,14 +49,4 @@ abbr -a edit-nvim-config "cd ~/.config/nvim && nvim"
 # quick edit ssh config
 abbr -a edit-ssh-config "nvim ~/.ssh/config"
 
-# extend ssh commmand
-function ssh
-  switch $argv[1]
-    case ls # ssh ls:  list all remotes
-      grep ^Host ~/.ssh/config | grep -v '*' | awk "{print \$2 \"\t\" \$4}" 
-      return
-    case '*'
-      command ssh $argv
-  end
-end
 

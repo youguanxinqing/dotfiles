@@ -18,21 +18,4 @@ function get_my_platform
 
 end
 
-function is_wsl2
-  if test (uname) = "Linux"
-    if string match -q "*WSL2*" (cat /proc/version)
-      echo "true"
-      return
-    end
-  end
-  
-  echo "false"
-end
 
-function command_exists
-    if command -q $argv[1]
-      echo "true"
-    else
-      echo "false"
-    end
-end
