@@ -41,8 +41,22 @@ abbr -a za "zellij attach"
 abbr -a zls "zellij ls"
 
 # quick edit fish root
-abbr -a edit-fish "cd ~/.config/fish && nvim"
+abbr -a edit-fish-config "cd ~/.config/fish && nvim"
 # quick edit the single fish file for lb
-abbr -a edit-lb-fish "nvim ~/.config/fish/conf.d/lb.fish"
+abbr -a edit-local-fish-config "nvim ~/.config/fish/local.d/local.fish"
 # quick edit nvim root
-abbr -a edit-nvim "cd ~/.config/nvim && nvim"
+abbr -a edit-nvim-config "cd ~/.config/nvim && nvim"
+# quick edit ssh config
+abbr -a edit-ssh-config "nvim ~/.ssh/config"
+
+# extend ssh commmand
+function ssh
+  switch $argv[1]
+    case ls # ssh ls:  list all remotes
+      grep ^Host ~/.ssh/config | grep -v '*' | awk "{print \$2 \"\t\" \$4}" 
+      return
+    case '*'
+      command ssh $argv
+  end
+end
+

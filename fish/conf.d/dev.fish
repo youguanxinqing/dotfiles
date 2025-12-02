@@ -53,3 +53,8 @@ if test (get_my_platform) = "darwin"
     echo "brew not found"
   end
 end
+
+# direnv: https://github.com/direnv/direnv
+if test (command_exists direnv) = "true"
+  direnv hook fish | source
+end

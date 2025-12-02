@@ -17,5 +17,11 @@ source ~/.config/fish/conf.d/alias.fish
 source ~/.config/fish/conf.d/cdpath.fish
 source ~/.config/fish/conf.d/dev.fish
 
+# using local fish
+set -l FISH_LOCAL_FILE ~/.config/fish/local.d/local.fish
+if test -e $FISH_LOCAL_FILE
+  source $FISH_LOCAL_FILE
+end
+
 fish_user_key_bindings
 
