@@ -1,4 +1,5 @@
 set -gx EDITOR nvim
+set -gx XDG_CONFIG_HOME "$HOME/.config"
 
 # Go: install goup (https://github.com/thinkgos/goup-rs)
 set -gx PATH $PATH $HOME/go/bin/

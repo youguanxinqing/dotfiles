@@ -7,10 +7,8 @@ local _config = {
 
 	-- font settings
 	font_size = 17,
-	-- font = wezterm.font("JetBrainsMono Nerd Font"),
 	font = wezterm.font_with_fallback({
-		{ family = "LXGW WenKai Mono Screen" },
-		-- { family = "LXGW WenKai Mono", weight = "Bold" },
+		"LXGW WenKai Mono Screen",
 		"JetBrainsMono Nerd Font Mono",
 	}),
 
@@ -25,8 +23,7 @@ local _config = {
 	enable_scroll_bar = true,
 
 	-- tar settings
-	enable_tab_bar = true,
-	tab_max_width = 50,
+	enable_tab_bar = false,
 }
 
 return _config
