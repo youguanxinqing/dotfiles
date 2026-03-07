@@ -13,8 +13,6 @@ function fish_prompt
     (set_color yellow) (fish_git_prompt) '$ '
 end
 
-source ~/.config/fish/conf.d/alias.fish
-source ~/.config/fish/conf.d/dev.fish
 
 # using local fish
 set -l FISH_LOCAL_FILE ~/.config/fish/local.d/local.fish

@@ -59,3 +59,6 @@ else
     end
   end
 end
+
+fnm env | source
+source ~/.goup/env

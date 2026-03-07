@@ -1,1 +1,14 @@
 fish_variables
+
+# completions
+docker.fish
+kubectl.fish
+orbctl.fish
+bun.fish
+
+# functions
+pt.fish
+portai-tree.fish
+
+# conf.d
+pyenv.fish
