@@ -1,23 +1,12 @@
 function __om_find_procfile_root --description "Find nearest parent dir containing Procfile within current git repo"
-    set -l start_dir (pwd)
-
-    # 当前目录如果都不在 git 仓库里，直接失败
-    git -C "$start_dir" rev-parse --show-toplevel >/dev/null 2>/dev/null
+    set -l git_root (git rev-parse --show-toplevel 2>/dev/null)
     or return 1
 
-    set -l git_root (git -C "$start_dir" rev-parse --show-toplevel 2>/dev/null)
-    test -n "$git_root"
-    or return 1
-
-    set -l dir "$start_dir"
+    # 用 git 自身的路径构建当前目录，避免 macOS 大小写不一致
+    set -l prefix (git rev-parse --show-prefix 2>/dev/null)
+    set -l dir (string replace -r '/$' '' "$git_root/$prefix")
 
     while true
-        # 只在同一个 git 仓库范围内向上找
-        if test "$dir" != "$git_root"
-            string match -q "$git_root*" "$dir"
-            or return 1
-        end
-
         if test -f "$dir/Procfile"
             echo "$dir"
             return 0
@@ -27,11 +16,7 @@ function __om_find_procfile_root --description "Find nearest parent dir containi
             break
         end
 
-        set -l parent (dirname "$dir")
-        if test "$parent" = "$dir"
-            break
-        end
-        set dir "$parent"
+        set dir (dirname "$dir")
     end
 
     return 1
@@ -45,22 +30,44 @@ function o --description "Run overmind from nearest parent dir containing Procfi
         return $status
     end
 
+    # 如果什么参数都没有, 就执行 overmind -h
+    if test (count $argv) -eq 0
+        command overmind -h
+        return $status
+    end
+
+    # 如果执行 o -h, 也需要执行 overmind -h
+    if contains -- -h $argv; or contains -- --help $argv
+        command overmind -h
+        return $status
+    end
+
     set -l root (__om_find_procfile_root)
     if test $status -ne 0
-        echo "om: no Procfile found in current directory or parent directories within this git repo" >&2
+        echo "o: no Procfile found in current directory or parent directories within this git repo" >&2
         return 1
     end
 
     set -l old_pwd (pwd)
     cd "$root"
     or begin
-        echo "om: failed to cd into $root" >&2
+        echo "o: failed to cd into $root" >&2
         return 1
     end
 
-    command overmind $argv
+    set -l output (command overmind $argv 2>&1)
     set -l rc $status
 
     cd "$old_pwd" >/dev/null 2>/dev/null
+
+    if test $rc -ne 0; and string match -q '*overmind.sock*' "$output"
+        echo "o: overmind is not running in $root" >&2
+        echo "  start it first: o start" >&2
+        return $rc
+    end
+
+    if test -n "$output"
+        echo "$output"
+    end
     return $rc
 end
