@@ -55,19 +55,10 @@ function o --description "Run overmind from nearest parent dir containing Procfi
         return 1
     end
 
-    set -l output (command overmind $argv 2>&1)
+    # 直接连接当前终端，保留 overmind 自己的实时输出和交互行为
+    command overmind $argv
     set -l rc $status
 
     cd "$old_pwd" >/dev/null 2>/dev/null
-
-    if test $rc -ne 0; and string match -q '*overmind.sock*' "$output"
-        echo "o: overmind is not running in $root" >&2
-        echo "  start it first: o start" >&2
-        return $rc
-    end
-
-    if test -n "$output"
-        echo "$output"
-    end
     return $rc
 end
