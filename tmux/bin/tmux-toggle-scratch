@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Toggle a bottom "scratch" pane in the current window.
+# Uses tmux pane user option @scratch as a stable marker (shell can't overwrite it).
+
+SCRATCH="_scratch"
+
+# Check if scratch pane is visible in the current window
+pane_id=$(tmux list-panes -F '#{pane_id}:#{@scratch}' | grep ":1$" | head -1 | cut -d: -f1)
+
+if [ -n "$pane_id" ]; then
+    # Visible → hide by breaking into its own hidden window
+    tmux break-pane -d -s "$pane_id" -n "$SCRATCH"
+else
+    # Check if a hidden scratch window exists in this session
+    win_target=$(tmux list-windows -F '#{window_id}:#{window_name}' | grep ":${SCRATCH}$" | head -1 | cut -d: -f1)
+
+    if [ -n "$win_target" ]; then
+        # Hidden → join back as a bottom split
+        tmux join-pane -v -l 30% -s "${SCRATCH}"
+        tmux select-pane -t '{bottom}'
+    else
+        # Doesn't exist → create a new bottom split and mark it
+        tmux split-window -v -l 30% -c "#{pane_current_path}"
+        tmux set -p @scratch 1
+    fi
+fi
