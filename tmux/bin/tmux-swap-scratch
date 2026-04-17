@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Swap sizes between the scratch pane and the main (non-scratch) pane.
+# Swap the scratch pane and the main pane (position + size).
 # If scratch pane is not visible, do nothing.
 
 # Find the scratch pane
@@ -10,8 +10,6 @@ if [ -z "$scratch_id" ]; then
     exit 0
 fi
 
-# Get current pane heights: scratch and the other pane
-scratch_height=$(tmux display -p -t "$scratch_id" '#{pane_height}')
 current_id=$(tmux display -p '#{pane_id}')
 
 # Pick the main pane (the non-scratch one)
@@ -23,5 +21,5 @@ fi
 
 main_height=$(tmux display -p -t "$main_id" '#{pane_height}')
 
-# Resize scratch pane to the main pane's height (this effectively swaps)
-tmux resize-pane -t "$scratch_id" -y "$main_height"
+# Swap position and size
+tmux swap-pane -s "$scratch_id" -t "$main_id"
