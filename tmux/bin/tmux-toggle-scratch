@@ -3,9 +3,12 @@
 # Uses tmux pane user option @scratch as a stable marker (shell can't overwrite it).
 
 SCRATCH="_scratch"
+SCRATCH_SESSION="zzz_scratch"
 current_window=$(tmux display-message -p '#{window_id}')
 current_session=$(tmux display-message -p '#{session_id}')
 owner_pane=$(tmux display-message -p '#{pane_id}')
+scratch_key=$(printf '%s' "$current_session" | tr -d '$')
+scratch_window="${SCRATCH}_${scratch_key}"
 
 find_new_pane() {
     old_panes="$1"
@@ -17,15 +20,41 @@ find_new_pane() {
     done
 }
 
+ensure_scratch_session() {
+    if ! tmux has-session -t "$SCRATCH_SESSION" 2>/dev/null; then
+        tmux new-session -d -s "$SCRATCH_SESSION" -n "__scratch_home"
+    fi
+    tmux set-option -t "$SCRATCH_SESSION" status off
+    tmux set-option -t "$SCRATCH_SESSION" destroy-unattached off
+    tmux set-option -t "$SCRATCH_SESSION" detach-on-destroy off
+    tmux set-option -t "$SCRATCH_SESSION" renumber-windows off
+}
+
+find_hidden_window() {
+    tmux list-windows -t "$SCRATCH_SESSION" -F '#{window_id}:#{window_name}' 2>/dev/null | grep ":${scratch_window}$" | head -1 | cut -d: -f1
+}
+
+find_legacy_hidden_window() {
+    tmux list-windows -t "$current_session" -F '#{window_id}:#{window_name}' 2>/dev/null | grep ":${SCRATCH}$" | head -1 | cut -d: -f1
+}
+
 # Check if scratch pane is visible in the current window
 pane_id=$(tmux list-panes -t "$current_window" -F '#{pane_id}:#{@scratch}' | grep ":1$" | head -1 | cut -d: -f1)
 
 if [ -n "$pane_id" ]; then
-    # Visible → hide by breaking into its own hidden window
-    tmux break-pane -d -s "$pane_id" -n "$SCRATCH"
+    # Visible → move into the dedicated scratch session instead of the workspace session
+    ensure_scratch_session
+    win_target=$(find_hidden_window)
+    if [ -n "$win_target" ]; then
+        tmux kill-window -t "$win_target"
+    fi
+    tmux break-pane -d -s "$pane_id" -t "${SCRATCH_SESSION}:" -n "$scratch_window"
 else
-    # Check if a hidden scratch window exists in this session
-    win_target=$(tmux list-windows -t "$current_session" -F '#{window_id}:#{window_name}' | grep ":${SCRATCH}$" | head -1 | cut -d: -f1)
+    # Restore from the dedicated scratch session first, then fall back to the legacy in-session window.
+    win_target=$(find_hidden_window)
+    if [ -z "$win_target" ]; then
+        win_target=$(find_legacy_hidden_window)
+    fi
 
     if [ -n "$win_target" ]; then
         # Hidden → join back as a bottom split
