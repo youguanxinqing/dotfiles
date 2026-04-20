@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+SCRATCH_SESSION="zzz_scratch"
+SCRATCH_HOME="__scratch_home"
+
+if ! tmux has-session -t "$SCRATCH_SESSION" 2>/dev/null; then
+    exit 0
+fi
+
+tmux list-windows -t "$SCRATCH_SESSION" -F '#{window_id} #{window_name}' | while read -r window_id window_name; do
+    if [ "$window_name" = "$SCRATCH_HOME" ]; then
+        continue
+    fi
+
+    pane_id=$(tmux list-panes -t "$window_id" -F '#{pane_id}' | head -1)
+    if [ -z "$pane_id" ]; then
+        tmux kill-window -t "$window_id"
+        continue
+    fi
+
+    workspace_window=$(tmux display-message -p -t "$pane_id" '#{@scratch_workspace_window}')
+    workspace_session=$(tmux display-message -p -t "$pane_id" '#{@scratch_workspace_session}')
+    owner_pane=$(tmux display-message -p -t "$pane_id" '#{@scratch_owner}')
+
+    if [ -z "$workspace_window" ] || [ -z "$workspace_session" ]; then
+        if [ -n "$owner_pane" ] && ! tmux list-panes -a -F '#{pane_id}' | grep -qx "$owner_pane"; then
+            tmux kill-window -t "$window_id"
+        fi
+        continue
+    fi
+
+    if ! tmux has-session -t "$workspace_session" 2>/dev/null; then
+        tmux kill-window -t "$window_id"
+        continue
+    fi
+
+    if ! tmux list-windows -a -F '#{window_id}' | grep -qx "$workspace_window"; then
+        tmux kill-window -t "$window_id"
+    fi
+done
+
+if [ "$(tmux list-windows -t "$SCRATCH_SESSION" | wc -l | tr -d ' ')" = "1" ]; then
+    tmux kill-session -t "$SCRATCH_SESSION"
+fi

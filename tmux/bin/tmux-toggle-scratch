@@ -7,7 +7,7 @@ SCRATCH_SESSION="zzz_scratch"
 current_window=$(tmux display-message -p '#{window_id}')
 current_session=$(tmux display-message -p '#{session_id}')
 owner_pane=$(tmux display-message -p '#{pane_id}')
-scratch_key=$(printf '%s' "$current_session" | tr -d '$')
+scratch_key=$(printf '%s' "$current_window" | tr -d '@')
 scratch_window="${SCRATCH}_${scratch_key}"
 
 find_new_pane() {
@@ -18,6 +18,14 @@ find_new_pane() {
             break
         fi
     done
+}
+
+mark_scratch_pane() {
+    pane_id="$1"
+    tmux set -p -t "$pane_id" @scratch 1
+    tmux set -p -t "$pane_id" @scratch_owner "$owner_pane"
+    tmux set -p -t "$pane_id" @scratch_workspace_window "$current_window"
+    tmux set -p -t "$pane_id" @scratch_workspace_session "$current_session"
 }
 
 ensure_scratch_session() {
@@ -38,12 +46,15 @@ find_legacy_hidden_window() {
     tmux list-windows -t "$current_session" -F '#{window_id}:#{window_name}' 2>/dev/null | grep ":${SCRATCH}$" | head -1 | cut -d: -f1
 }
 
+"$HOME/.tmux/bin/tmux-cleanup-scratch" >/dev/null 2>&1
+
 # Check if scratch pane is visible in the current window
 pane_id=$(tmux list-panes -t "$current_window" -F '#{pane_id}:#{@scratch}' | grep ":1$" | head -1 | cut -d: -f1)
 
 if [ -n "$pane_id" ]; then
     # Visible → move into the dedicated scratch session instead of the workspace session
     ensure_scratch_session
+    mark_scratch_pane "$pane_id"
     win_target=$(find_hidden_window)
     if [ -n "$win_target" ]; then
         tmux kill-window -t "$win_target"
@@ -62,15 +73,14 @@ else
         old_panes=$(tmux list-panes -t "$current_window" -F '#{pane_id}')
         tmux join-pane -t "$current_window" -v -l 30% -s "$source_pane"
         pane_id=$(find_new_pane "$old_panes")
-        tmux set -p -t "$pane_id" @scratch_owner "$owner_pane"
+        mark_scratch_pane "$pane_id"
         tmux select-pane -t "$pane_id"
     else
         # Doesn't exist → create a new bottom split and mark it
         old_panes=$(tmux list-panes -t "$current_window" -F '#{pane_id}')
         tmux split-window -t "$current_window" -v -l 30% -c "#{pane_current_path}"
         pane_id=$(find_new_pane "$old_panes")
-        tmux set -p -t "$pane_id" @scratch 1
-        tmux set -p -t "$pane_id" @scratch_owner "$owner_pane"
+        mark_scratch_pane "$pane_id"
         tmux select-pane -t "$pane_id"
     fi
 fi
