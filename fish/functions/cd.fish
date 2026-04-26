@@ -4,11 +4,11 @@ function cd
     if set -q OLDPWD
       set -l target $OLDPWD
       set -gx OLDPWD $PWD
-      builtin cd $target
+      builtin cd -- $target
     end
   else
     # Save current directory before changing
     set -gx OLDPWD $PWD
-    builtin cd $argv
+    builtin cd -- $argv
   end
 end
