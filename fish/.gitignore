@@ -12,3 +12,4 @@ portai-tree.fish
 
 # conf.d
 pyenv.fish
+conf.d/fish_frozen_*.fish
