@@ -8,7 +8,7 @@ bun.fish
 
 # functions
 pt.fish
-portai-tree.fish
+portai*
 
 # conf.d
 pyenv.fish
