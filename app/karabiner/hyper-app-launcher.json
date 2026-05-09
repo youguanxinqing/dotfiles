@@ -93,6 +93,23 @@
           ]
         }
       ]
+    },
+    {
+      "description": "Hyper + W → Things 3 Inbox",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "w",
+            "modifiers": { "mandatory": ["command", "control", "option", "shift"] }
+          },
+          "to": [
+            {
+              "shell_command": "open 'things:///show?id=inbox'"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
