@@ -57,6 +57,23 @@
           ]
         }
       ]
+    },
+    {
+      "description": "Hyper + Q → Things 3 Today",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "q",
+            "modifiers": { "mandatory": ["command", "control", "option", "shift"] }
+          },
+          "to": [
+            {
+              "shell_command": "open 'things:///show?id=today'"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
