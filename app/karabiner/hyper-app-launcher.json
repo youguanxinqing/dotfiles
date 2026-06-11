@@ -129,6 +129,23 @@
       ]
     },
     {
+      "description": "Hyper + Left Option → QuickPrompt Search",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "left_option",
+            "modifiers": { "mandatory": ["command", "control", "option", "shift"] }
+          },
+          "to": [
+            {
+              "shell_command": "open -g 'quickprompt://search'"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "description": "Hyper + E → Emacs",
       "manipulators": [
         {
