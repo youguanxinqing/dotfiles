@@ -43,19 +43,24 @@ end
 
 
 set cdptah
-set -gx CDPATH .
+# 只 set -g 不 -gx: fish 自己的 cd 认非导出的 CDPATH，而一旦导出，bash 的 cd 就会
+# 把目标目录打到 stdout，`ROOT="$(cd "$(dirname "$0")/.." && pwd)"` 这类到处都是的写法
+# 会拿到两行的路径。herdr-reviewr 的 install.sh 就是这么挂掉的。
+# 先 erase 是因为从父进程继承来的 CDPATH 自带 export 标记，set -g 不会把它摘掉。
+set -e CDPATH
+set -g CDPATH .
 if test (get_my_platform) = "darwin"
-  set -gx CDPATH $CDPATH ~/projects
+  set -g CDPATH $CDPATH ~/projects
 else
   if test (is_wsl2) = "true"
-      set -gx CDPATH $CDPATH ~/projects/
+      set -g CDPATH $CDPATH ~/projects/
   else
     if test (get_my_platform) = "windows"
-      set -gx CDPATH $CDPATH /mnt/d/code
+      set -g CDPATH $CDPATH /mnt/d/code
     else if test (get_my_platform) = "linux"
-      set -gx CDPATH $CDPATH ~/Public
+      set -g CDPATH $CDPATH ~/Public
     else if test (get_my_platform) = "darwin"
-      set -gx CDPATH $CDPATH ~/projects
+      set -g CDPATH $CDPATH ~/projects
     end
   end
 end
