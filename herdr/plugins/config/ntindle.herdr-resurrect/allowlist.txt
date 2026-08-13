@@ -1,0 +1,87 @@
+# herdr-resurrect — programs that are safe to auto-relaunch on restore.
+#
+# One program name per line. Matching is case-insensitive and ignores a path and a
+# trailing .exe, so "nvim", "NVIM" and "/usr/bin/nvim" all match "nvim".
+# Lines starting with # are comments.
+#
+# Put a single line containing only  *  to restore EVERY foreground program
+# (aggressive — will re-run whatever was running, use with care).
+#
+# NOTE: AI agents (claude, copilot, codex, gemini, ...) are detected by herdr and
+# restored through the agent path automatically — you do not list them here.
+
+# --- editors / pagers ---
+vim
+nvim
+vi
+nano
+emacs
+helix
+hx
+less
+more
+tail
+bat
+
+# --- runtimes / REPLs ---
+node
+deno
+bun
+python
+python3
+ipython
+irb
+ruby
+php
+
+# --- dev servers / watchers / task runners ---
+npm
+pnpm
+yarn
+vite
+next
+nodemon
+webpack
+gulp
+grunt
+turbo
+tsc
+
+# --- build / language tooling ---
+make
+cargo
+go
+gradle
+mvn
+dotnet
+
+# --- monitors / TUIs ---
+top
+htop
+btop
+btm
+watch
+ctop
+lazygit
+lazydocker
+k9s
+
+# --- database / infra clients ---
+psql
+mysql
+redis-cli
+mongosh
+sqlite3
+docker
+kubectl
+
+# --- networking (comment out if you don't want auto-reconnect on restore) ---
+ssh
+mosh
+
+# --- 本机实际在跑、但默认 allowlist 没覆盖的 ---
+# autoRestore 保持 false，所以只在你按 prefix+ctrl+r 时才跑，不会开机自己起。
+overmind
+
+# 故意不加 rg: 那个 pane 跑的是 `some-log-cmd | rg -v ...` 这类管道，
+# 而快照只抓到管道的最后一节。单独恢复 rg 会挂在那儿等 stdin，比不恢复更糟。

@@ -2,3 +2,4 @@ kitty => ~/.config/kitty
 fish => ~/.config/fish
 wezterm => ~/.config/wezterm
 ghostty => ~/.config/ghostty
+herdr => ~/.config/herdr

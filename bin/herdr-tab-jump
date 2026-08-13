@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Fuzzy-jump to any herdr tab. Bound to prefix+f in herdr/config.toml.
+# ponytail: 建的是 fzf 管道而不是装插件 —— 内建 prefix+1..9 够不到编号 >= 10 的 tab，
+# 这就是唯一的缺口。想要连 agent/repo/branch 一起搜再换 jeffarese/herdr-bar。
+set -euo pipefail
+
+sel=$({ herdr workspace list; herdr tab list; } \
+  | jq -rs '(.[0].result.workspaces | map({(.workspace_id): .label}) | add) as $ws
+      | .[1].result.tabs[]
+      | [.tab_id, (if .focused then "*" else " " end) + (.number|tostring),
+         ($ws[.workspace_id] // .workspace_id), .label, .agent_status] | @tsv' \
+  | column -t -s "$(printf '\t')" \
+  | fzf --prompt='tab> ' --header='enter 聚焦 / esc 取消' --no-multi) || exit 0
+
+herdr tab focus "${sel%% *}"

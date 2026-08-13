@@ -4,6 +4,20 @@ fish/conf.d/variables/proxy.fish
 
 config/private_remote/
 
+# herdr runtime state: logs, sockets, session/release cache
+herdr/*.log
+herdr/*.sock
+herdr/session.json
+herdr/release-notes.json
+herdr/.plugins.lock
+herdr/plugins.json
+herdr/plugins/github/
+# 插件目录里只跟踪配置文件，其余都是插件自己写的运行时状态
+herdr/plugins/config/*/*
+!herdr/plugins/config/*/config.toml
+!herdr/plugins/config/*/settings.json
+!herdr/plugins/config/*/allowlist.txt
+
 .DS_Store
 
 sync-note.sh
@@ -11,3 +25,5 @@ sync-note.log
 
 clash-verge-recv/
 clash-verge-rev/
+
+__pycache__/

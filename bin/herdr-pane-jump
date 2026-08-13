@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+"""tmux display-panes 的等价物：列出当前 tab 的 pane，按一个数字跳过去。
+
+herdr 的 socket API 没有 focus-pane-by-id，只有 `pane focus --direction`。
+所以这里从 pane 的矩形推出方向图，BFS 求一条「当前 pane -> 目标 pane」的
+方向序列，再逐步执行。
+
+只花 2 次 herdr 调用（layout + list）就能把列表画出来。之前用 `pane neighbor`
+逐个方向问邻居要 4N 次、再加 N 次 process-info，4 个 pane 就是 21 次往返，
+弹窗有肉眼可见的延迟；矩形本来就在 layout 里，邻接关系自己算不用问。
+
+ponytail: BFS 而不是按坐标贪心 —— 贪心在嵌套 split 里会来回震荡。
+          只编号当前 tab 的 pane（和 tmux display-panes 一样），所以永远 <= 一位数；
+          跨 tab 用 prefix+f。
+弹窗里的键：ctrl+p / ctrl+n、j / k、上下方向键移动光标，回车确认；
+            1..9 直接跳（不用移光标）；esc / ctrl+c / q 取消。
+用法: herdr-pane-jump [N]   给了 N 就直接跳、不进交互（自检入口）。
+"""
+import json
+import os
+import subprocess
+import sys
+import unicodedata
+from collections import deque
+
+# pane_gaps 打开时相邻 pane 之间可能空 1 列/行，两种都算相邻
+ADJACENT = (0, 1)
+
+# 和 herdr/config.toml 里 prefix+q 那条的 width 保持一致（popup 尺寸只能写死在配置里）
+WIDTH = 56
+
+
+def herdr(*args):
+    out = subprocess.run(("herdr",) + args, capture_output=True, text=True, check=True).stdout
+    return json.loads(out)["result"]
+
+
+def main():
+    layout = herdr("pane", "layout", "--current")["layout"]
+    rects = {p["pane_id"]: p["rect"] for p in layout["panes"]}
+    order = [p["pane_id"] for p in layout["panes"]]
+    here = layout["focused_pane_id"]
+
+    titles = {
+        p["pane_id"]: p.get("terminal_title_stripped") or p.get("agent") or ""
+        for p in herdr("pane", "list")["panes"]
+    }
+
+    # 不标「当前 pane」：光标初始就停在它上面，多一个符号只是噪音
+    rows = [
+        f"{i}  {clip(titles.get(pane) or pane, WIDTH - 6)}"
+        for i, pane in enumerate(order, 1)
+    ]
+
+    if len(order) == 1:
+        print(rows[0])
+        return 0
+
+    if len(sys.argv) > 1:  # 非交互，自检用
+        print("\n".join(rows))
+        chosen = int(sys.argv[1]) - 1 if sys.argv[1].isdigit() else -1
+    else:
+        chosen = pick(rows, order.index(here) if here in order else 0)
+    if chosen is None or not 0 <= chosen < len(order):
+        return 0
+    target = order[chosen]
+
+    path = bfs(build_graph(rects), here, target)
+    if path is None:
+        print(f"\n没有方向路径可以从 {here} 走到 {target}", file=sys.stderr)
+        return 1
+    for d in path:
+        herdr("pane", "focus", "--direction", d)
+    return 0
+
+
+def build_graph(rects):
+    """从矩形推方向图：共享一条边就是邻居。
+
+    一条边上可能贴着好几个 pane（左列一整块对着右列上下两块），此时取重叠最多的
+    那个，重叠相同则取坐标小的 —— 这条规则和 `herdr pane neighbor` 的实际返回一致。
+    """
+    graph = {}
+    for a, ra in rects.items():
+        cands = {d: [] for d in ("left", "right", "up", "down")}
+        for b, rb in rects.items():
+            if a == b:
+                continue
+            v = overlap(ra["y"], ra["height"], rb["y"], rb["height"])
+            if v > 0:
+                if rb["x"] - (ra["x"] + ra["width"]) in ADJACENT:
+                    cands["right"].append((v, -rb["y"], b))
+                elif ra["x"] - (rb["x"] + rb["width"]) in ADJACENT:
+                    cands["left"].append((v, -rb["y"], b))
+            h = overlap(ra["x"], ra["width"], rb["x"], rb["width"])
+            if h > 0:
+                if rb["y"] - (ra["y"] + ra["height"]) in ADJACENT:
+                    cands["down"].append((h, -rb["x"], b))
+                elif ra["y"] - (rb["y"] + rb["height"]) in ADJACENT:
+                    cands["up"].append((h, -rb["x"], b))
+        graph[a] = {d: max(c)[2] for d, c in cands.items() if c}
+    return graph
+
+
+def overlap(a, alen, b, blen):
+    return min(a + alen, b + blen) - max(a, b)
+
+
+def cells_of(s):
+    return sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in s)
+
+
+def clip(s, cells):
+    """按显示宽度截断 —— CJK 一个字占两格，按字符数截会撑破 popup 边框。
+
+    截断时补的 "…" 自己也占一格，得算进预算里，否则正好超出一格。
+    """
+    if cells_of(s) <= cells:
+        return s
+    out, used = [], 0
+    for ch in s:
+        w = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+        if used + w > cells - 1:
+            break
+        out.append(ch)
+        used += w
+    return "".join(out) + "…"
+
+
+def budget_rows():
+    """popup 里能安全画几行。
+
+    popup 的尺寸只能在 config.toml 里写死常量，pane 数却是变的（见过 6 个），
+    所以行数得在运行时按实际高度算，超出的部分靠滚动窗口显示。
+    留 1 行余量：写满最后一行的换行会把整屏顶上去一行。
+    """
+    try:
+        return max(1, os.get_terminal_size(sys.stdout.fileno()).lines - 1)
+    except OSError:
+        return 23
+
+
+def viewport(n, cur, budget):
+    """滚动窗口 (start, end)：光标居中，且必然落在窗口内。"""
+    if n <= budget:
+        return 0, n
+    start = max(0, min(cur - budget // 2, n - budget))
+    return start, start + budget
+
+
+def pick(rows, start, getkey=None, render=None, budget=None):
+    """光标选择：ctrl+p/n、j/k、方向键移动，回车确认，数字直接选，esc/ctrl+c/q 取消。
+
+    返回选中的下标，取消返回 None。getkey/render 可注入，好让 --demo 不需要真 tty 就能
+    验证这套按键状态机 —— 之前想用 pty 驱动，结果测试脚手架自己先卡住了。
+    """
+    getkey = getkey or read_key
+    render = render or draw
+    budget = budget or budget_rows()
+    if getkey is read_key:
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        saved = termios.tcgetattr(fd)
+        tty.setraw(fd)
+    i = start
+    render(rows, i, budget, first=True)
+    try:
+        while True:
+            k = getkey()
+            if k in ("\x03", "ESC", "q"):
+                return None
+            if k in ("\r", "\n"):
+                return i
+            if k.isdigit():
+                return int(k) - 1
+            if k in ("\x10", "k", "UP"):
+                i = (i - 1) % len(rows)
+            elif k in ("\x0e", "j", "DOWN"):
+                i = (i + 1) % len(rows)
+            else:
+                continue
+            render(rows, i, budget)
+    finally:
+        if getkey is read_key:
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def draw(rows, cur, budget, first=False):
+    """光标只用一个 ❯ 表示；行数超过 popup 高度时按滚动窗口画。
+
+    反显整行太丑，而且补空格补到固定宽度时 CJK 按字符数算宽度会算短、行被终端折下去，
+    在框里留一截脏色块。只画一个符号就没有宽度问题，也不需要补空格。
+    窗口外还有内容时，首/末行的槽位画 ⋯ —— 光标是居中的，不会和 ❯ 抢同一格。
+    """
+    start, end = viewport(len(rows), cur, budget)
+    if not first:
+        sys.stdout.write(f"\x1b[{end - start}A")  # 回到窗口第一行原地重画
+    for i in range(start, end):
+        if i == cur:
+            gutter = "❯"
+        elif (i == start and start > 0) or (i == end - 1 and end < len(rows)):
+            gutter = "⋯"
+        else:
+            gutter = " "
+        sys.stdout.write(f"\x1b[K{gutter} {rows[i]}\r\n")  # [K 清掉上次残留
+    sys.stdout.flush()
+
+
+def read_key():
+    import select
+
+    ch = sys.stdin.read(1)
+    if ch != "\x1b":
+        return ch
+    # 方向键是 ESC [ A/B，单独的 esc 后面没有字节，用 select 区分
+    if select.select([sys.stdin], [], [], 0.02)[0]:
+        return {"[A": "UP", "[B": "DOWN"}.get(sys.stdin.read(2), "ESC")
+    return "ESC"
+
+
+def bfs(graph, start, goal):
+    seen = {start}
+    q = deque([(start, [])])
+    while q:
+        node, path = q.popleft()
+        if node == goal:
+            return path
+        for d, nxt in graph[node].items():
+            if nxt not in seen:
+                seen.add(nxt)
+                q.append((nxt, path + [d]))
+    return None
+
+
+def demo():
+    """自检：不碰真实会话，验证 build_graph + bfs 在嵌套 split 上正确。
+
+    布局（和 label tab 同构）:  pR | pS      左列上下分，右列上下分，比例不同
+                               p0 | pW
+    """
+    rects = {
+        "pR": {"x": 26, "y": 1, "width": 155, "height": 26},
+        "p0": {"x": 26, "y": 27, "width": 155, "height": 26},
+        "pS": {"x": 181, "y": 1, "width": 52, "height": 13},
+        "pW": {"x": 181, "y": 14, "width": 52, "height": 39},
+    }
+    g = build_graph(rects)
+    assert g["pR"] == {"right": "pS", "down": "p0"}, g["pR"]
+    assert g["p0"] == {"right": "pW", "up": "pR"}, g["p0"]
+    assert g["pS"] == {"left": "pR", "down": "pW"}, g["pS"]
+    assert g["pW"] == {"left": "p0", "up": "pS"}, g["pW"]
+    # 每一对都必须可达，且路径长度不超过 pane 数
+    for a in rects:
+        for b in rects:
+            if a != b:
+                path = bfs(g, a, b)
+                assert path is not None, f"{a} -> {b} 不可达"
+                assert len(path) <= len(rects), f"{a} -> {b} 绕远了: {path}"
+    assert bfs(g, "pR", "pW") == ["right", "down"]
+
+    # clip 永远不能超出预算（CJK 两格 + "…" 自己一格，最容易差一格）
+    budget = WIDTH - 4
+    for s in ("短", "abc", "评审新版本Memory实现顺便把配置也管起来再加一点长度" * 3, "汉" * 40, "a" * 200):
+        assert cells_of(clip(s, budget)) <= budget, (s[:20], cells_of(clip(s, budget)))
+    assert clip("abc", 10) == "abc"
+
+    # 按键状态机：注入假的 getkey/render，不需要真 tty
+    rows = ["r0", "r1", "r2", "r3"]
+
+    def run(keys, start):
+        it = iter(keys)
+        return pick(rows, start, getkey=lambda: next(it), render=lambda *a, **k: None, budget=99)
+
+    assert run(["\x0e", "\r"], 1) == 2, "ctrl+n 往下一格"
+    assert run(["\x10", "\r"], 1) == 0, "ctrl+p 往上一格"
+    assert run(["\x10", "\x10", "\r"], 1) == 3, "往上越界要绕回末尾"
+    assert run(["\x0e", "\x0e", "\x0e", "\r"], 3) == 2, "往下越界要绕回开头"
+    assert run(["j", "j", "\r"], 0) == 2, "j/k 也能动"
+    assert run(["DOWN", "\r"], 0) == 1, "方向键"
+    assert run(["UP", "\r"], 0) == 3
+    assert run(["3"], 0) == 2, "数字直接选，不用回车"
+    assert run(["ESC"], 0) is None, "esc 取消"
+    assert run(["\x03"], 2) is None, "ctrl+c 取消"
+    assert run(["q"], 2) is None
+    assert run(["x", "\x0e", "\r"], 0) == 1, "无关按键要忽略掉"
+
+    # 滚动窗口：光标必须始终可见，窗口不能超预算，也不能越界
+    for n in range(1, 13):
+        for b in range(1, 13):
+            for cur in range(n):
+                s, e = viewport(n, cur, b)
+                assert 0 <= s <= cur < e <= n, (n, cur, b, s, e)
+                assert e - s == min(n, b), (n, cur, b, s, e)
+    assert viewport(2, 0, 7) == (0, 2), "装得下就不滚"
+    assert viewport(6, 0, 5) == (0, 5)
+    assert viewport(6, 5, 5) == (1, 6), "光标在末尾时窗口贴到末尾"
+    # 需要滚动时，光标不会落在带 ⋯ 的首/末行（否则两个符号抢同一格）
+    for n, b in ((6, 5), (12, 4), (20, 9)):
+        for cur in range(n):
+            s, e = viewport(n, cur, b)
+            if s > 0:
+                assert cur != s, (n, b, cur)
+            if e < n:
+                assert cur != e - 1, (n, b, cur)
+    print("demo ok")
+
+
+if __name__ == "__main__":
+    sys.exit(demo() if sys.argv[1:2] == ["--demo"] else main())

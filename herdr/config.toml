@@ -1,0 +1,96 @@
+onboarding = false
+[ui]
+agent_panel_sort = "spaces"
+
+# 后台 agent 状态变化走系统通知。默认是 "off"，所以之前一条通知都收不到
+# （插件调 notification show 时返回的就是 {"reason":"disabled"}）。
+# 同时挂着 5 个 claude 的时候，"哪个在等我" 靠这个而不是靠盯屏幕。
+[ui.toast]
+delivery = "system"
+
+[theme]
+name = "nord"
+auto_switch = false
+
+# Pane 切换。列表形式让两套键同时生效：
+#   ctrl+alt+hjkl —— 直接按，不用先按 prefix，日常就用这个
+#   prefix+hjkl   —— 保留默认键当退路（ghostty 只把 left-Option 当 alt）
+# nvim 自己的 ctrl+w hjkl 不受影响，也没有抢走 shell 的 ctrl+l / ctrl+k。
+[keys]
+focus_pane_left  = ["prefix+h", "ctrl+alt+h"]
+focus_pane_down  = ["prefix+j", "ctrl+alt+j"]
+focus_pane_up    = ["prefix+k", "ctrl+alt+k"]
+focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+
+# herdr 默认没绑 last_pane。工作 tab 基本都是 nvim | claude 两半，
+# 在「刚才那个 pane」之间来回跳比按方向键更常用，方向键在 3~4 pane 的 tab 里才有意义。
+last_pane = "ctrl+alt+o"
+
+# prefix+alt+<数字> 跨 tab 跳到第 N 个 agent pane，N = 侧栏（prefix+b）里的行序。
+# 数字看不见，得自己数行；同 tab 内的 pane 用 prefix+q 那个带列表的更省事。
+focus_agent = "prefix+alt+1..9"
+
+# detach 从 prefix+q 挪到 prefix+d（tmux 本来就是 prefix+d），把 prefix+q 让给
+# 下面那个 display-panes 等价物 —— 保住 tmux 的肌肉记忆。
+detach = "prefix+d"
+
+# herdr-navigator: prefix+t 开 fuzzy navigator，prefix+shift+L 跳回上一个 workspace。
+# 避开了默认占用的 prefix+shift+t (rename_tab) 和 prefix+l (focus_pane_right)。
+[[keys.command]]
+key = "prefix+t"
+type = "plugin_action"
+command = "herdr-navigator.open"
+description = "jump to anything"
+
+[[keys.command]]
+key = "prefix+shift+l"
+type = "plugin_action"
+command = "herdr-navigator.jump-back"
+description = "jump to previous workspace"
+
+# 按名字模糊跳 tab（内建 prefix+1..9 到不了编号 >= 10 的 tab）。脚本在 dotfiles/bin/。
+[[keys.command]]
+key = "prefix+f"
+type = "popup"
+command = "herdr-tab-jump"
+width = "60%"
+height = "50%"
+description = "fuzzy jump to tab"
+
+# tmux display-panes 的等价物：列出当前 tab 的 pane，按一个数字跳过去。
+[[keys.command]]
+key = "prefix+q"
+type = "popup"
+# 写死成格子数而不是百分比：百分比在大屏上会撑出一个几乎全空的大框。
+# 实测可画行数 = height - 3（上下边框 + 顶部内边距各一行，再留一行防换行顶屏）。
+# 10 => 7 行，够放见过的最多 6 个 pane；再多脚本会自己滚动，不会画到框外面去。
+# 宽度和脚本里的 WIDTH 对齐。
+command = "herdr-pane-jump"
+width = 56
+height = 10
+description = "display panes and jump"
+
+# grep-nvim: fzf + ripgrep live-grep，回车在右边 split 里用 nvim 打到那一行，退出自动收掉。
+[[keys.command]]
+key = "prefix+alt+f"
+type = "plugin_action"
+command = "grep-nvim.open"
+description = "live-grep into nvim"
+
+# resurrect: 崩溃/重启后把 pane 里跑的东西重新拉起来（herdr 自己只恢复壳和 cwd）。
+# 存快照是事件驱动自动做的，不用绑键；autoRestore 保持 false，恢复只在你按这个键时发生。
+# 想先看计划: herdr plugin action invoke ntindle.herdr-resurrect.restore-preview
+[[keys.command]]
+key = "prefix+ctrl+r"
+type = "plugin_action"
+command = "ntindle.herdr-resurrect.restore"
+description = "resurrect: restore last snapshot"
+
+# reviewr: 在 agent 旁边开一个 review pane，读 diff、选行、写评论、一键发回给 agent。
+# 用 cmd+r 而不是 prefix+…: 它是 review 过程中反复开关的，直接键更顺手；
+# ghostty 默认没占 cmd+r（`ghostty +list-keybinds` 查过），alt+ 系列反而会被终端吞掉。
+[[keys.command]]
+key = "cmd+r"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "toggle reviewr pane"

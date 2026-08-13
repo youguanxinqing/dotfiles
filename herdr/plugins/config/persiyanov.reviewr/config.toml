@@ -1,0 +1,9 @@
+# reviewr 自己的配置文件，herdr/config.toml 里的设置到不了这里。
+# 只写和默认不同的项。注意：任何一个 key 写错，整份文件都作废（它不会只用对的那部分）。
+
+# 和 herdr 的 [theme] 一致，两边都有 nord 这个调色板；默认是 catppuccin。
+theme = "nord"
+
+# 本机所有仓库的主干都是 master。默认顺序是 main 再 master，
+# 显式写成 master 优先，免得在同时存在 origin/main 的仓库里挑错 base。
+base_branches = ["master", "main"]

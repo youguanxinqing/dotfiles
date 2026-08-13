@@ -1,0 +1,22 @@
+# Herdr Navigator — only the deviations from upstream defaults.
+# Full annotated reference:
+#   $(herdr plugin config-dir herdr-navigator)/../../github/herdr-navigator-*/examples/default-config.toml
+
+[picker]
+# Default order minus zoxide/project/quick — those sources are off below.
+source_order = ["workspace", "agent", "session", "root", "server", "plugin"]
+
+[sources]
+zoxide = false                   # zoxide 未安装；装了之后把这里和 source_order 一起打开
+herdr_plus_projects = false      # herdr-plus 未安装
+herdr_plus_quick_actions = false
+
+# 两个仓库聚集地。max_depth 把 root 自身算作第 1 层，所以「只要直接子目录」= 2；
+# 给 3 会把每个仓库的子目录也列进来（实测 112 条 vs 20 条）。
+[[roots]]
+path = "~/Projects"
+max_depth = 2
+
+[[roots]]
+path = "~/Projects/workspace"
+max_depth = 2
