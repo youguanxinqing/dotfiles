@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Toggle a bottom "scratch" pane in the current window.
+# Toggle the bottom scratch pane in the current window.
 # Uses tmux pane user option @scratch as a stable marker (shell can't overwrite it).
 
 SCRATCH="_scratch"
@@ -46,7 +46,7 @@ find_legacy_hidden_window() {
     tmux list-windows -t "$current_session" -F '#{window_id}:#{window_name}' 2>/dev/null | grep ":${SCRATCH}$" | head -1 | cut -d: -f1
 }
 
-"$HOME/.tmux/bin/tmux-cleanup-scratch" >/dev/null 2>&1
+"$HOME/.local/bin/tmux-cleanup-scratch" >/dev/null 2>&1
 
 # Check if scratch pane is visible in the current window
 pane_id=$(tmux list-panes -t "$current_window" -F '#{pane_id}:#{@scratch}' | grep ":1$" | head -1 | cut -d: -f1)

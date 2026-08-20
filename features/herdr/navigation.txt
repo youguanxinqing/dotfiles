@@ -1,0 +1,1 @@
+configs/herdr/config.toml => ~/.config/herdr/config.toml

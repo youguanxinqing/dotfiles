@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Swap the scratch pane and the main pane (position + size).
+# Swap the scratch pane and the main pane, including position and size.
 # If scratch pane is not visible, do nothing.
 
 current_window=$(tmux display-message -p '#{window_id}')

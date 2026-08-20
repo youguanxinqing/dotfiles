@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Jump to the next agent that is blocked or done. Bound to prefix+u in herdr/config.toml.
+# Jump to the next agent that is blocked or done. Bound to prefix+u in configs/herdr/config.toml.
 # Repeated presses cycle through them; blocked ranks before done. Agents that are
 # working or idle are never jumped to — with ~10 agents open, most are working.
 # Nothing to jump to: focus stays put, and a toast reports the current status mix.
@@ -23,7 +23,7 @@ notify() {
   # ] 会提前闭合 Lua 的 [[...]]，把后面的文案变成代码。删掉。
   local title=${1//]/} body=${2//]/}
   if pgrep -x Hammerspoon >/dev/null &&
-    [[ $(hs -t 1 -q -c "herdrToast({title=[[$title]], body=[[$body]]})" 2>/dev/null) == ok ]]; then
+    [[ $(hs -t 1 -q -c "notificationToast({title=[[$title]], body=[[$body]]})" 2>/dev/null) == ok ]]; then
     return
   fi
   "$(dirname "$(readlink -f "$0")")/terminal-notifier1.fish" \

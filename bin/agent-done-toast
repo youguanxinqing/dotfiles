@@ -36,7 +36,7 @@ agent=${agent//]/}
 
 # Hammerspoon 没跑就退回 terminal-notifier（原来的行为）。
 # -t 1 是必需的：不带超时且 Hammerspoon 没启动时，hs 会停在「要不要帮你启动」的确认上。
-toast="herdrToast({title=[[任务完成]], body=[[$where]], agent=[[$agent]], align=[[right]]})"
+toast="notificationToast({title=[[任务完成]], body=[[$where]], agent=[[$agent]], align=[[right]]})"
 if pgrep -x Hammerspoon >/dev/null &&
   [[ $(hs -t 1 -q -c "$toast" 2>/dev/null) == ok ]]; then
   exit 0

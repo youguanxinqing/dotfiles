@@ -1,7 +1,8 @@
--- Hammerspoon 配置。目前只有一件事：给 bin/herdr-agent-attention 发通知。
+-- 通用通知浮层。目前供 agent 完成通知和 Herdr attention 提示使用。
 --
 -- hs.ipc 是 `hs -c` 能连上来的前提，没有它 CLI 会一直等到超时。
-require("hs.ipc")
+local ipc = require("hs.ipc")
+ipc.cliInstall(os.getenv("HOME") .. "/.local", true)
 
 -- 用 hs.webview 而不是 hs.alert / hs.notify / hs.canvas：
 --   hs.alert  位置只能居中或贴边，单一字体字重，没有图标位
@@ -65,10 +66,10 @@ local ACCENT = {
 local ACCENT_FALLBACK = "#A3BE8C"
 
 -- 供 CLI 调用：
---   hs -t 1 -q -c 'herdrToast({title=[[标题]], body=[[正文]], agent=[[claude]], align=[[right]]})'
+--   hs -t 1 -q -c 'notificationToast({title=[[标题]], body=[[正文]], agent=[[claude]], align=[[right]]})'
 -- align 省略即居中；"right" 靠右上角。agent 省略则不显示来源标签。
 -- 返回 "ok" 让调用方能区分「弹出来了」和「函数没定义/配置没生效」。
-function herdrToast(opts)
+function notificationToast(opts)
   if current then
     current:delete()
     current = nil

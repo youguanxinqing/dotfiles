@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Fuzzy-jump to any herdr tab. Bound to prefix+f in herdr/config.toml.
+# Fuzzy-jump to any herdr tab. Bound to prefix+f in configs/herdr/config.toml.
 # ponytail: 建的是 fzf 管道而不是装插件 —— 内建 prefix+1..9 够不到编号 >= 10 的 tab，
 # 这就是唯一的缺口。想要连 agent/repo/branch 一起搜再换 jeffarese/herdr-bar。
 set -euo pipefail
+
+# Herdr may have been started outside fish (for example by a GUI terminal), so
+# popup helpers must not depend on fish having initialized PATH first.
+export PATH="$HOME/.local/bin:$HOME/.fzf/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 out=$({ herdr workspace list; herdr tab list; })
 

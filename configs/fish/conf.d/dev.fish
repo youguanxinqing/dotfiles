@@ -1,17 +1,7 @@
 set -gx EDITOR nvim
 set -gx XDG_CONFIG_HOME "$HOME/.config"
 
-# Go: install goup (https://github.com/thinkgos/goup-rs)
-set -gx PATH $PATH $HOME/go/bin/
-# fzf
-set PATH $PATH "$HOME/.fzf/bin/"
-# eask
-set PATH $PATH "$HOME/.local/bin"
-# fnm
-set PATH "~/.local/share/fnm" $PATH
-
 # Rust: install rust, cagro,... (https://www.rust-lang.org/tools/install)
-set -gx PATH $PATH $HOME/.cargo/bin/
 set -gx RUSTUP_DIST_SERVER https://rsproxy.cn
 set -gx RUSTUP_UPDATE_ROOT https://rsproxy.cn/rustup
 
@@ -30,14 +20,11 @@ if test (is_wsl2) = "true"
   set -gx LIBGL_ALWAYS_INDIRECT 1
 end
 
-# load binary path for macos
-if test (get_my_platform) = "darwin"
-  if test (command_exists /opt/homebrew/bin/brew) = "true"
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-  else if test (command_exists /usr/local/bin/brew) = "true"
-    eval "$(/usr/local/bin/brew shellenv)"
-  else
-    echo "brew not found"
+# Homebrew uses one Brewfile on macOS and Linux, but a different prefix.
+for brew in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew
+  if test -x $brew
+    eval ($brew shellenv fish)
+    break
   end
 end
 
@@ -65,5 +52,10 @@ else
   end
 end
 
-fnm env | source
-source ~/.goup/env
+if type -q fnm
+  fnm env | source
+end
+
+if test -f ~/.goup/env
+  source ~/.goup/env
+end

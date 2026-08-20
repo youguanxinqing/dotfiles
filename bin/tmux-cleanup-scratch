@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Remove scratch windows whose workspace no longer exists.
 
 SCRATCH_SESSION="zzz_scratch"
 SCRATCH_HOME="__scratch_home"

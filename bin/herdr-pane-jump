@@ -23,10 +23,22 @@ import sys
 import unicodedata
 from collections import deque
 
+# Herdr may have been started outside fish. Make installed user commands
+# discoverable from the popup even when the server inherited macOS's minimal PATH.
+os.environ["PATH"] = os.pathsep.join(
+    (
+        os.path.expanduser("~/.local/bin"),
+        os.path.expanduser("~/.fzf/bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        os.environ.get("PATH", ""),
+    )
+)
+
 # pane_gaps 打开时相邻 pane 之间可能空 1 列/行，两种都算相邻
 ADJACENT = (0, 1)
 
-# 和 herdr/config.toml 里 prefix+q 那条的 width 保持一致（popup 尺寸只能写死在配置里）
+# 和 configs/herdr/config.toml 里 prefix+q 那条的 width 保持一致（popup 尺寸只能写死在配置里）
 WIDTH = 56
 
 

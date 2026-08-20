@@ -1,24 +1,36 @@
-fish/local.d/
-fish/conf.d/variables/proxy.fish
-!fish/conf.d/variables/proxy.fish.template
+configs/fish/local.d/
+configs/fish/conf.d/variables/proxy.fish
+!configs/fish/conf.d/variables/proxy.fish.template
 
-config/private_remote/
+# Public repository: keep machine-local data and credentials out.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+**/*.local
+**/secrets.*
+**/credentials.*
+**/*.pem
+**/*.key
+**/*.bak
+
+configs/wezterm/config/private_remote/
 
 # herdr runtime state: logs, sockets, session/release cache
-herdr/*.log
-herdr/*.sock
-herdr/session.json
+configs/herdr/*.log
+configs/herdr/*.sock
+configs/herdr/session.json
 # 多 session 布局下每个 session 一个目录，内容同上：日志、socket、session.json
-herdr/sessions/
-herdr/release-notes.json
-herdr/.plugins.lock
-herdr/plugins.json
-herdr/plugins/github/
+configs/herdr/sessions/
+configs/herdr/release-notes.json
+configs/herdr/.plugins.lock
+configs/herdr/plugins.json
+configs/herdr/plugins/github/
 # 插件目录里只跟踪配置文件，其余都是插件自己写的运行时状态
-herdr/plugins/config/*/*
-!herdr/plugins/config/*/config.toml
-!herdr/plugins/config/*/settings.json
-!herdr/plugins/config/*/allowlist.txt
+configs/herdr/plugins/config/*/*
+!configs/herdr/plugins/config/*/config.toml
+!configs/herdr/plugins/config/*/settings.json
+!configs/herdr/plugins/config/*/allowlist.txt
 
 .DS_Store
 

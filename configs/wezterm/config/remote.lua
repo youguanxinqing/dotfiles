@@ -22,14 +22,14 @@ local function load_ssh_domains_options()
     end
 end
 
--- format:
+-- Private files use this shape:
 -- {
---     name = "ali-chengdu-2",
---     remote_address = "127.0.0.1",
+--     name = "example",
+--     remote_address = "server.example.com",
 --     multiplexing = "None",
---     username = "root",
+--     username = "user",
 --     ssh_option = {
---         identityfile = "xxxx",
+--         identityfile = "~/.ssh/id_ed25519",
 --     },
 -- }
 local config = {
@@ -37,7 +37,6 @@ local config = {
     }
 }
 
--- load private ssh config
 table_utils.extend(config.ssh_domains, load_ssh_domains_options())
 
 return config
