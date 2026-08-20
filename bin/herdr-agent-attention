@@ -16,6 +16,9 @@ herdr="${herdr% (deleted)}"
 # Hammerspoon 的浮层样式可控、且不管你当前在哪个 app 都看得到（herdr 内浮层只画在
 # 终端里，系统通知又长得跟主题不搭）。它没跑或 ipc 没加载就退回 herdr 的系统通知。
 # -t 1 是必需的：不带超时且 Hammerspoon 没启动时，hs 会停在「要不要帮你启动」的确认上。
+# 兜底走 terminal-notifier 而不是 `herdr notification show`：config.toml 里
+# [ui.toast] delivery = "off"，herdr 的通知一律返回 {"shown":false,"reason":"disabled"}，
+# 拿它当兜底等于 Hammerspoon 没跑时什么都不弹。
 notify() {
   # ] 会提前闭合 Lua 的 [[...]]，把后面的文案变成代码。删掉。
   local title=${1//]/} body=${2//]/}
@@ -23,14 +26,18 @@ notify() {
     [[ $(hs -t 1 -q -c "herdrToast({title=[[$title]], body=[[$body]]})" 2>/dev/null) == ok ]]; then
     return
   fi
-  "$herdr" notification show "$title" --body "$body" --sound none >/dev/null
+  "$(dirname "$(readlink -f "$0")")/terminal-notifier1.fish" \
+    -title "$title" -message "$body" >/dev/null 2>&1 || true
 }
 
 agents=$("$herdr" agent list)
 
+# 不排 pane_id：它是 "wB:pK" 这种字符串，字典序会把 p1,pA,pK,p12 拧成
+# p1,p12,pA,pK，跟屏幕上的顺序对不上。api 返回的顺序本身是稳定的（实测多次
+# 调用一致），照抄就行，只把 blocked 提到 done 前面。
 target=$(jq -r '
-  ([.result.agents[] | select(.agent_status == "blocked" or .agent_status == "done")]
-   | sort_by(.agent_status != "blocked", .pane_id)) as $ranked
+  ([.result.agents[] | select(.agent_status == "blocked")]
+   + [.result.agents[] | select(.agent_status == "done")]) as $ranked
   | ($ranked | map(.focused) | index(true)) as $at
   | if ($ranked | length) == 0 then empty
     else $ranked[if $at == null then 0 else ($at + 1) % ($ranked | length) end].pane_id

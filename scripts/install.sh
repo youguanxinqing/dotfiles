@@ -29,5 +29,8 @@ fi
 # awk 不展开 ~，自己来。
 TARGET="${TARGET/#\~/$HOME}"
 
+# 全新机器上 ~/.config 还不存在，ln 不会自己建父目录。
+mkdir -p "$(dirname "$TARGET")"
+
 # -n 是关键：目标已经是软链时，不带 -n 的 ln 会钻进去建 <target>/<FLAG>。
 ln -sfn "$(pwd)/$FLAG" "$TARGET"

@@ -19,5 +19,5 @@ function herdr-popup-kill --description "close a stuck herdr popup via the socke
         return 1
     end
 
-    printf '{"id":"herdr-popup-kill","method":"popup.close","params":{}}\n' | nc -U $sock
+    printf '{"id":"herdr-popup-kill","method":"popup.close","params":{}}\n' | nc -U -w 2 $sock
 end

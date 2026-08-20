@@ -22,6 +22,11 @@ herdr/plugins/config/*/*
 
 .DS_Store
 
+# Claude Code 的本机 permission 白名单。~/.config/git/ignore 里已经有一条全局规则，
+# 但那是机器上的、不随仓库走 —— 新机器上克隆完就没人拦了，而这个文件里会出现
+# 公司项目路径，仓库是公开的。所以在仓库里再挡一次。
+**/.claude/settings.local.json
+
 sync-note.sh
 sync-note.log
 

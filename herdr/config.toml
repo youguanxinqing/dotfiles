@@ -4,18 +4,16 @@ onboarding = false
 # 同时挂 10 个 agent 时，按 space 分组等于要自己扫一遍找哪个在等我。
 agent_panel_sort = "priority"
 
-# 后台 agent 状态变化走系统通知。默认是 "off"，所以之前一条通知都收不到
-# （插件调 notification show 时返回的就是 {"reason":"disabled"}）。
-# 同时挂着 5 个 claude 的时候，"哪个在等我" 靠这个而不是靠盯屏幕。
-# 试过 "herdr"（终端内浮层）：样式只能调 accent 和 panel_bg，且切出终端就看不到，
-# 而这个通知的全部价值就在你没盯着终端的时候。
+# agent 完成的通知不走 herdr：由 Claude Code 的 Stop hook -> bin/agent-done-toast
+# -> Hammerspoon 右上角卡片负责，herdr 再弹一个是重复。
+# 也试过 delivery = "herdr"（终端内浮层）：样式只能调 accent 和 panel_bg，且切出
+# 终端就看不到，而这个通知的全部价值就在你没盯着终端的时候。
+#
+# 注意：off 之后 `herdr notification show` 一律返回
+# {"shown":false,"reason":"disabled"} —— 脚本不要拿它当兜底，
+# bin/herdr-agent-attention 踩过这个坑，现在退回 terminal-notifier。
 [ui.toast]
-# "off"：agent 完成的通知已经由 Claude Code 的 Stop hook -> bin/agent-done-toast
-# -> Hammerspoon 右上角卡片负责，herdr 再弹一个终端内浮层是重复。
 delivery = "off"
-
-[ui.toast.herdr]
-position = "top-right"
 
 [theme]
 name = "nord"
