@@ -1,12 +1,21 @@
 onboarding = false
 [ui]
-agent_panel_sort = "spaces"
+# "priority" = attention queue（要人管的排前面），不再按 workspace 分组。
+# 同时挂 10 个 agent 时，按 space 分组等于要自己扫一遍找哪个在等我。
+agent_panel_sort = "priority"
 
 # 后台 agent 状态变化走系统通知。默认是 "off"，所以之前一条通知都收不到
 # （插件调 notification show 时返回的就是 {"reason":"disabled"}）。
 # 同时挂着 5 个 claude 的时候，"哪个在等我" 靠这个而不是靠盯屏幕。
+# 试过 "herdr"（终端内浮层）：样式只能调 accent 和 panel_bg，且切出终端就看不到，
+# 而这个通知的全部价值就在你没盯着终端的时候。
 [ui.toast]
-delivery = "system"
+# "off"：agent 完成的通知已经由 Claude Code 的 Stop hook -> bin/agent-done-toast
+# -> Hammerspoon 右上角卡片负责，herdr 再弹一个终端内浮层是重复。
+delivery = "off"
+
+[ui.toast.herdr]
+position = "top-right"
 
 [theme]
 name = "nord"
@@ -33,6 +42,12 @@ focus_agent = "prefix+alt+1..9"
 # detach 从 prefix+q 挪到 prefix+d（tmux 本来就是 prefix+d），把 prefix+q 让给
 # 下面那个 display-panes 等价物 —— 保住 tmux 的肌肉记忆。
 detach = "prefix+d"
+
+# 建/关 tab 全部走下面的 herdr-smart-tab 绑定（同名 tab 分组编 ⅱⅲ 后缀，
+# 每个 label 带 "N." 位置前缀，让 prefix+1..9 可预测）。禁用内建键，
+# 否则绕过脚本建出来的 tab 编号会漂，要按 prefix+shift+r 手动修。
+new_tab = ""
+close_tab = ""
 
 # herdr-navigator: prefix+t 开 fuzzy navigator，prefix+shift+L 跳回上一个 workspace。
 # 避开了默认占用的 prefix+shift+t (rename_tab) 和 prefix+l (focus_pane_right)。
@@ -94,3 +109,89 @@ key = "cmd+r"
 type = "plugin_action"
 command = "persiyanov.reviewr.toggle"
 description = "toggle reviewr pane"
+
+# herdr-smart-tab: tmux 式建 tab（i=前 a=后 I=最前 A=最后），同名分组自动编号。
+# 脚本来自 griffinqiu/dotfiles，type=shell 由 server 直接跑，PATH 不可靠，写绝对路径。
+[[keys.command]]
+key = "prefix+i"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" before'
+description = "new tab before current (tmux i)"
+
+[[keys.command]]
+key = "prefix+a"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" after'
+description = "new tab after current (tmux a)"
+
+[[keys.command]]
+key = "prefix+shift+i"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" first'
+description = "new tab at beginning (tmux I)"
+
+[[keys.command]]
+key = "prefix+shift+a"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" last'
+description = "new tab at end (tmux A)"
+
+# prefix+c 是被上面 new_tab = "" 禁掉的默认建 tab 键，接回脚本保住肌肉记忆。
+# 语义同 tmux c：建到最后。注意会继承最后一个 tab 的组名，要干净名字建完改名。
+[[keys.command]]
+key = "prefix+c"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" last'
+description = "new tab at end (tmux c)"
+
+[[keys.command]]
+key = "prefix+x"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" close-pane'
+description = "close pane and renumber"
+
+[[keys.command]]
+key = "prefix+shift+x"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" close-tab'
+description = "close tab and renumber"
+
+# 手动修复键：拖拽换过 tab 顺序、或有 tab 绕过脚本创建时按一下，顺便 reload 配置。
+[[keys.command]]
+key = "prefix+shift+r"
+type = "shell"
+command = '"${HERDR_BIN_PATH:-herdr}" server reload-config && "${HOME}/Projects/dotfiles/bin/herdr-smart-tab" renumber-all'
+description = "reload config and renumber tabs"
+
+# herdr-scratch: 浮空 scratchpad，nvim toggleterm 的等价物。shell 活在插件私有的
+# herdr-scratch session 里，prefix+q 收起来只是脱离浮层，进程和滚动历史都还在，
+# 再按 prefix+g 原样回来。默认 workspace 作用域，每个 workspace 一个自己的 scratchpad。
+# 内建的 type = "popup" 做不到这个：命令退出即销毁。
+[[keys.command]]
+key = "prefix+p"
+type = "plugin_action"
+command = "herdr.scratch.toggle"
+description = "toggle scratchpad"
+
+[[keys.command]]
+key = "prefix+g"
+type = "plugin_action"
+command = "herdr.scratch.lazygit"
+description = "toggle lazygit scratchpad"
+
+# 跳到下一个 blocked / done 的 agent，连按循环。working / idle 的一律不跳 ——
+# 内建 next_agent 会把它们一起轮进来，挂 10 个的时候要多按好几下。
+[[keys.command]]
+key = "prefix+u"
+type = "shell"
+command = '"${HOME}/Projects/dotfiles/bin/herdr-agent-attention"'
+description = "jump to next blocked or done agent"
+
+# agents 面板的 workspace 名默认恒定加粗（sidebar.rs 里未选中分支也 add_modifier(BOLD)），
+# spaces 面板未选中行则不加粗，两个面板看起来不是一套东西。去掉粗体对齐 spaces。
+# 代价：当前活跃的那行也不再加粗，靠背景高亮 + 更亮的前景色区分。
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", { token = "workspace", bold = false }, "tab"],
+  ["agent"],
+]

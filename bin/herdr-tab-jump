@@ -4,11 +4,20 @@
 # 这就是唯一的缺口。想要连 agent/repo/branch 一起搜再换 jeffarese/herdr-bar。
 set -euo pipefail
 
-sel=$({ herdr workspace list; herdr tab list; } \
-  | jq -rs '(.[0].result.workspaces | map({(.workspace_id): .label}) | add) as $ws
+out=$({ herdr workspace list; herdr tab list; })
+
+# ponytail: server/CLI protocol 不匹配等错误会返回 error JSON，静默过 jq 就是空列表 —— 直接把错误亮出来
+err=$(jq -rs '[.[].error.message // empty] | first // empty' <<<"$out")
+if [ -n "$err" ]; then
+  printf '%s\n' "$err"
+  read -rsn1
+  exit 1
+fi
+
+sel=$(jq -rs '(.[0].result.workspaces | map({(.workspace_id): .label}) | add) as $ws
       | .[1].result.tabs[]
       | [.tab_id, (if .focused then "*" else " " end) + (.number|tostring),
-         ($ws[.workspace_id] // .workspace_id), .label, .agent_status] | @tsv' \
+         ($ws[.workspace_id] // .workspace_id), .label, .agent_status] | @tsv' <<<"$out" \
   | column -t -s "$(printf '\t')" \
   | fzf --prompt='tab> ' --header='enter 聚焦 / esc 取消' --no-multi) || exit 0
 
