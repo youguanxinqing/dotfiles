@@ -8,6 +8,8 @@ config/private_remote/
 herdr/*.log
 herdr/*.sock
 herdr/session.json
+# 多 session 布局下每个 session 一个目录，内容同上：日志、socket、session.json
+herdr/sessions/
 herdr/release-notes.json
 herdr/.plugins.lock
 herdr/plugins.json
