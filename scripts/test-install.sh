@@ -111,10 +111,12 @@ if grep -Fq shared "$BREW_TEST_ROOT/brew.log"; then
   exit 1
 fi
 
-dependency_output="$(PATH="$BREW_TEST_ROOT/bin:/usr/bin:/bin" \
+git config --file "$BREW_TEST_ROOT/gitconfig" core.pager custom-pager
+dependency_output="$(PATH="$BREW_TEST_ROOT/bin:/usr/bin:/bin" GIT_CONFIG_GLOBAL="$BREW_TEST_ROOT/gitconfig" \
   "$ROOT/scripts/install-deps.sh" --dry-run)"
 [[ "$dependency_output" == *"verify enabled CLI commands"* ]]
 [[ "$dependency_output" != *"Installing CLI: hammerspoon"* ]]
+[[ "$dependency_output" != *"core.pager"* ]]
 
 # Homebrew bootstrap failure is aggregated without hiding later installer results.
 mkdir -p "$BOOTSTRAP_ROOT/scripts/installers" "$BOOTSTRAP_ROOT/bin"

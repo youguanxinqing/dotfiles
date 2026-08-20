@@ -374,7 +374,7 @@ else
   echo "CLI check passed."
 fi
 
-run git config --global core.pager delta
-run git config --global interactive.diffFilter "delta --color-only"
-run git config --global delta.navigate true
-run git config --global merge.conflictStyle zdiff3
+git config --global --get core.pager >/dev/null 2>&1 || run git config --global core.pager delta
+git config --global --get interactive.diffFilter >/dev/null 2>&1 || run git config --global interactive.diffFilter "delta --color-only"
+git config --global --get delta.navigate >/dev/null 2>&1 || run git config --global delta.navigate true
+git config --global --get merge.conflictStyle >/dev/null 2>&1 || run git config --global merge.conflictStyle zdiff3
