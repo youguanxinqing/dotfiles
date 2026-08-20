@@ -4,3 +4,25 @@ font-family = "JetBrainsMono Nerd Font Mono"
 font-size = 16
 macos-option-as-alt = left
 # theme = Everforest Dark Hard
+
+# ghostty 默认 foreground = #ffffff，比它自己调色板里的 white (palette 7 = #c5c8c6)
+# 还亮 —— 任何不带颜色的普通输出都被拉到纯白，在 #282c34 背景上刺眼。
+# tmux 窗口看着舒服只是因为 .tmux.conf 里 window-style 'fg=colour247' 把它压过了
+# (colour247 = #9e9e9e)，herdr 不做这种覆盖，于是默认值原样暴露出来。
+# #9e9e9e 就是 colour247 本身，和 tmux 那半边 1:1。One Dark 的 #abb2bf 亮度更高但
+# 带 +21 的蓝调（B-R），和 tmux 的中性灰摆一起能看出来色差。
+foreground = #9e9e9e
+
+# ghostty 默认 background = #282c34（One Dark），带 +12 的蓝调。
+# #1d1f21 = palette 0，即 .tmux.conf 里 window-active-style 'bg=black' 的那个色 ——
+# 也就是你在 tmux 里实际盯着的那个 pane 的背景。inactive pane 是 colour236 (#303030)，
+# tmux 靠这两个背景的深浅区分焦点；ghostty 只有一个背景，所以取 active 那个。
+background = #1d1f21
+
+# 小键盘没有独立的 PageUp/PageDown。herdr 靠「不带修饰键的 PageUp/PageDown」滚
+# pane scrollback（src/app/input/terminal.rs:146），那段是写死的 KeyCode::PageUp
+# + modifiers.is_empty()，herdr 侧改不了（discussion #1705 没做）。
+# 所以在 ghostty 这层翻译：csi:5~ = ESC[5~ = PageUp，csi:6~ = ESC[6~ = PageDown。
+# 选 ctrl+alt+u/d 是为了和 config.toml 里已有的 ctrl+alt+hjkl 同一族。
+keybind = ctrl+alt+u=csi:5~
+keybind = ctrl+alt+d=csi:6~
