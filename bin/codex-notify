@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Codex 的 notify 钩子。codex 只有一个 notify 槽，原来被 Codex Computer Use
+# 占着，所以这里做转发：先按原样把 payload 喂给它，再弹自己的卡片。
+set -uo pipefail
+
+SKY="${HOME}/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient"
+if [[ -x $SKY ]]; then
+  "$SKY" turn-ended "$@" >/dev/null 2>&1 || true
+fi
+
+# notify 会带多种事件，只有回合结束才值得弹。
+event=$(printf '%s' "${1:-}" | jq -r '.type // ""' 2>/dev/null || true)
+[[ $event == "agent-turn-complete" ]] || exit 0
+
+exec "${HOME}/Projects/dotfiles/bin/agent-done-toast" codex "${PWD##*/}"

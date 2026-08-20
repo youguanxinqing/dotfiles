@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Claude Code 的 Stop 钩子。位置信息归 agent-done-toast 管，这里只把钩子
+# payload 里的 cwd 拆出来，当 herdr 之外运行时的兜底。
+set -uo pipefail
+
+cwd=$(jq -r '.cwd // ""' 2>/dev/null || true)
+exec "${HOME}/Projects/dotfiles/bin/agent-done-toast" claude "${cwd##*/}"
