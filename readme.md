@@ -3,10 +3,13 @@
 ## Usage
 
 ```bash
-git clone git@github.com:youguanxinqing/dotfiles.git ~/dotfiles
-cd ~/dotfiles/scripts/
-bash install [FLAG]
+git clone git@github.com:youguanxinqing/dotfiles.git
+bash <repo>/scripts/install.sh FLAG
 ```
+
+`FLAG` is a top-level directory name from `navigation.txt` (`fish`, `ghostty`,
+`herdr`, `hammerspoon`, ...); install.sh symlinks it to the target listed there.
+Clone anywhere — install.sh derives the repo root from its own location.
 
 ## Herdr Plugins
 

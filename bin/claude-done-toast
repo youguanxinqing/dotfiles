@@ -3,5 +3,7 @@
 # payload 里的 cwd 拆出来，当 herdr 之外运行时的兜底。
 set -uo pipefail
 
+# 这个脚本经 ~/.claude/hooks/ 的软链调用，$0 得先解开才能找到同目录的兄弟脚本。
+here=$(dirname "$(readlink -f "$0")")
 cwd=$(jq -r '.cwd // ""' 2>/dev/null || true)
-exec "${HOME}/Projects/dotfiles/bin/agent-done-toast" claude "${cwd##*/}"
+exec "$here/agent-done-toast" claude "${cwd##*/}"

@@ -42,6 +42,6 @@ if pgrep -x Hammerspoon >/dev/null &&
   exit 0
 fi
 
-"${HOME}/Projects/dotfiles/bin/terminal-notifier1.fish" \
+"$(dirname "$(readlink -f "$0")")/terminal-notifier1.fish" \
   -title "✅ $agent" -message "任务完成 · $where" >/dev/null 2>&1 || true
 exit 0

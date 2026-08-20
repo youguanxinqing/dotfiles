@@ -111,29 +111,31 @@ command = "persiyanov.reviewr.toggle"
 description = "toggle reviewr pane"
 
 # herdr-smart-tab: tmux 式建 tab（i=前 a=后 I=最前 A=最后），同名分组自动编号。
-# 脚本来自 griffinqiu/dotfiles，type=shell 由 server 直接跑，PATH 不可靠，写绝对路径。
+# 脚本来自 griffinqiu/dotfiles。type=shell 由 server 直接跑，PATH 不可靠，只能写绝对路径。
+# 但不写死 repo 位置：~/.config/herdr 是指向本 repo herdr/ 的软链（scripts/install.sh 建的），
+# 而 ".." 由内核在解开软链之后才解析，所以 .config/herdr/../bin 就是本 repo 的 bin/。
 [[keys.command]]
 key = "prefix+i"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" before'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" before'
 description = "new tab before current (tmux i)"
 
 [[keys.command]]
 key = "prefix+a"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" after'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" after'
 description = "new tab after current (tmux a)"
 
 [[keys.command]]
 key = "prefix+shift+i"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" first'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" first'
 description = "new tab at beginning (tmux I)"
 
 [[keys.command]]
 key = "prefix+shift+a"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" last'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" last'
 description = "new tab at end (tmux A)"
 
 # prefix+c 是被上面 new_tab = "" 禁掉的默认建 tab 键，接回脚本保住肌肉记忆。
@@ -141,26 +143,26 @@ description = "new tab at end (tmux A)"
 [[keys.command]]
 key = "prefix+c"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" last'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" last'
 description = "new tab at end (tmux c)"
 
 [[keys.command]]
 key = "prefix+x"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" close-pane'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" close-pane'
 description = "close pane and renumber"
 
 [[keys.command]]
 key = "prefix+shift+x"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-smart-tab" close-tab'
+command = '"${HOME}/.config/herdr/../bin/herdr-smart-tab" close-tab'
 description = "close tab and renumber"
 
 # 手动修复键：拖拽换过 tab 顺序、或有 tab 绕过脚本创建时按一下，顺便 reload 配置。
 [[keys.command]]
 key = "prefix+shift+r"
 type = "shell"
-command = '"${HERDR_BIN_PATH:-herdr}" server reload-config && "${HOME}/Projects/dotfiles/bin/herdr-smart-tab" renumber-all'
+command = '"${HERDR_BIN_PATH:-herdr}" server reload-config && "${HOME}/.config/herdr/../bin/herdr-smart-tab" renumber-all'
 description = "reload config and renumber tabs"
 
 # herdr-scratch: 浮空 scratchpad，nvim toggleterm 的等价物。shell 活在插件私有的
@@ -184,7 +186,7 @@ description = "toggle lazygit scratchpad"
 [[keys.command]]
 key = "prefix+u"
 type = "shell"
-command = '"${HOME}/Projects/dotfiles/bin/herdr-agent-attention"'
+command = '"${HOME}/.config/herdr/../bin/herdr-agent-attention"'
 description = "jump to next blocked or done agent"
 
 # agents 面板的 workspace 名默认恒定加粗（sidebar.rs 里未选中分支也 add_modifier(BOLD)），

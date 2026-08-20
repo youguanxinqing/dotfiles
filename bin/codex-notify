@@ -12,4 +12,4 @@ fi
 event=$(printf '%s' "${1:-}" | jq -r '.type // ""' 2>/dev/null || true)
 [[ $event == "agent-turn-complete" ]] || exit 0
 
-exec "${HOME}/Projects/dotfiles/bin/agent-done-toast" codex "${PWD##*/}"
+exec "$(dirname "$(readlink -f "$0")")/agent-done-toast" codex "${PWD##*/}"
