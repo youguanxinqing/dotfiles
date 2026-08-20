@@ -33,18 +33,12 @@ function bm --description 'start (or stop) a workspace from the global bootmux l
         set session (string replace -a "/" "-" "$abbr-$branch")
     end
 
-    # 全局模板是唯一事实源。bootmux 的 herdr 后端按 canonicalize 后的
-    # config 路径记 ownership，同一路径同时只允许一个活 workspace，
-    # 软链又会被解析回源文件 —— 所以每个 session 物化一份副本，
-    # 路径唯一、内容每次从全局模板刷新。
-    set -l template ~/.config/tmuxinator/dev.yml
-    set -l conf ~/.cache/bootmux-bm/$session.yml
-    mkdir -p ~/.cache/bootmux-bm
-    cp $template $conf
-
+    # 布局唯一事实源：~/.config/tmuxinator/dev.yml。
+    # 需要 bootmux >= 0.3.0：herdr 归属键含渲染后的项目名，
+    # 多个 worktree 才能共用同一份配置。
     if test "$argv[1]" = stop
-        bootmux stop -p $conf root=$root session=$session $argv[2..]
+        bootmux stop dev root=$root session=$session $argv[2..]
     else
-        bootmux start -p $conf root=$root session=$session $argv
+        bootmux start dev root=$root session=$session $argv
     end
 end
