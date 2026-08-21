@@ -1,7 +1,8 @@
 
 # alias for coding agents
-# opus 是别名，跟最新的 Opus 走，不写死 claude-opus-5
-alias claude="claude --permission-mode auto --model opus --effort max"
+# opus 是别名，跟最新的 Opus 走，不写死 claude-opus-5；
+# [1m] 后缀要的是 1M context 那个变体，光写 opus 拿到的是默认 200K。
+alias claude='claude --permission-mode auto --model "opus[1m]" --effort max'
 # codex 不需要 alias：model / reasoning effort 在 ~/.codex/config.toml，
 # 目录信任要在启动前算，见 functions/codex.fish
 

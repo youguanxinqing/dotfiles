@@ -58,4 +58,5 @@ end
 
 if test -f ~/.goup/env
   source ~/.goup/env
+  set -e GOROOT
 end
