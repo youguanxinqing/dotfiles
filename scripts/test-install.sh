@@ -15,6 +15,8 @@ CONFLICT_HOME="$TEST_ROOT/conflict-home"
 LEGACY_HOME="$TEST_ROOT/legacy-home"
 FEATURE_ROOT="$TEST_ROOT/feature"
 FEATURE_HOME="$TEST_ROOT/feature-home"
+GHOSTTY_MAC_HOME="$TEST_ROOT/ghostty-mac-home"
+GHOSTTY_LINUX_HOME="$TEST_ROOT/ghostty-linux-home"
 BREW_TEST_ROOT="$TEST_ROOT/brew"
 CLI_TEST_ROOT="$TEST_ROOT/cli"
 CLI_TEST_HOME="$TEST_ROOT/cli-home"
@@ -25,6 +27,7 @@ GOUP_TEST_HOME="$TEST_ROOT/goup-home"
 HERDR_TEST_ROOT="$TEST_ROOT/herdr"
 CODEX_TEST_ROOT="$TEST_ROOT/codex"
 mkdir -p "$TEST_HOME" "$CONFLICT_HOME" "$LEGACY_HOME" "$FEATURE_ROOT" "$FEATURE_HOME" \
+  "$GHOSTTY_MAC_HOME" "$GHOSTTY_LINUX_HOME" \
   "$BREW_TEST_ROOT" "$CLI_TEST_ROOT" "$CLI_TEST_HOME" "$BOOTSTRAP_ROOT" "$BOOTSTRAP_HOME" \
   "$GOUP_TEST_ROOT" "$GOUP_TEST_HOME" "$HERDR_TEST_ROOT" "$CODEX_TEST_ROOT"
 trap 'rm -rf "$TEST_ROOT"' EXIT
@@ -44,6 +47,18 @@ HOME="$TEST_HOME" "$ROOT/install.sh" --links-only fish herdr hammerspoon tmux bi
 [[ "$(readlink "$TEST_HOME/.local/bin/herdr-smart-tab")" == "$ROOT/bin/herdr-smart-tab" ]]
 [[ "$(readlink "$TEST_HOME/.tmux.conf")" == "$ROOT/configs/tmux/tmux.conf" ]]
 [[ "$(readlink "$TEST_HOME/.local/bin/tmux-toggle-scratch")" == "$ROOT/bin/tmux-toggle-scratch" ]]
+
+# Ghostty uses Application Support before XDG on macOS; Linux uses XDG.
+mkdir -p "$TEST_ROOT/platform-mac-bin" "$TEST_ROOT/platform-linux-bin"
+printf '#!/usr/bin/env bash\necho Darwin\n' > "$TEST_ROOT/platform-mac-bin/uname"
+printf '#!/usr/bin/env bash\necho Linux\n' > "$TEST_ROOT/platform-linux-bin/uname"
+chmod +x "$TEST_ROOT/platform-mac-bin/uname" "$TEST_ROOT/platform-linux-bin/uname"
+PATH="$TEST_ROOT/platform-mac-bin:$PATH" HOME="$GHOSTTY_MAC_HOME" \
+  "$ROOT/install.sh" --links-only ghostty
+[[ "$(readlink "$GHOSTTY_MAC_HOME/Library/Application Support/com.mitchellh.ghostty")" == "$ROOT/configs/ghostty" ]]
+PATH="$TEST_ROOT/platform-linux-bin:$PATH" HOME="$GHOSTTY_LINUX_HOME" \
+  "$ROOT/install.sh" --links-only ghostty
+[[ "$(readlink "$GHOSTTY_LINUX_HOME/.config/ghostty")" == "$ROOT/configs/ghostty" ]]
 
 mkdir -p "$CONFLICT_HOME/.config/fish"
 conflict_output="$(HOME="$CONFLICT_HOME" "$ROOT/install.sh" --links-only fish)"

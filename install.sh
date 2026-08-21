@@ -12,6 +12,7 @@ FEATURE_VALUES=()
 ENABLED_FEATURES=()
 FEATURE_CLI_MANIFESTS=()
 MANIFESTS=("$ROOT/navigation.txt")
+SYSTEM_NAME="$(uname -s)"
 
 usage() {
   cat <<'EOF'
@@ -110,6 +111,15 @@ is_requested() {
   return 1
 }
 
+resolve_target() {
+  local source="$1" target="$2"
+  if [[ "$SYSTEM_NAME" == Darwin && "$source" == configs/ghostty ]]; then
+    printf '%s\n' "$HOME/Library/Application Support/com.mitchellh.ghostty"
+  else
+    printf '%s\n' "$HOME/${target#\~/}"
+  fi
+}
+
 link_manifest() {
   local manifest="$1" source arrow target current
   while read -r source arrow target; do
@@ -117,8 +127,8 @@ link_manifest() {
     validate_entry "$source" "$arrow" "$target"
     is_requested "$source" || continue
 
+    target="$(resolve_target "$source" "$target")"
     source="$ROOT/$source"
-    target="$HOME/${target#\~/}"
     [[ -e "$source" ]] || { echo "Missing source: $source" >&2; exit 1; }
 
     if [[ -L "$target" ]]; then
@@ -159,8 +169,8 @@ clean_links() {
   while read -r source arrow target; do
     [[ -z "$source" || "$source" == \#* ]] && continue
     validate_entry "$source" "$arrow" "$target"
+    target="$(resolve_target "$source" "$target")"
     source="$ROOT/$source"
-    target="$HOME/${target#\~/}"
 
     if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
       if ((DRY_RUN)); then
