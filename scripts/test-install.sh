@@ -8,20 +8,26 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
   echo "tmux helpers must be executable." >&2
   exit 1
 }
-TEST_HOME="$(mktemp -d)"
-CONFLICT_HOME="$(mktemp -d)"
-LEGACY_HOME="$(mktemp -d)"
-FEATURE_ROOT="$(mktemp -d)"
-FEATURE_HOME="$(mktemp -d)"
-BREW_TEST_ROOT="$(mktemp -d)"
-CLI_TEST_ROOT="$(mktemp -d)"
-CLI_TEST_HOME="$(mktemp -d)"
-BOOTSTRAP_ROOT="$(mktemp -d)"
-BOOTSTRAP_HOME="$(mktemp -d)"
-GOUP_TEST_ROOT="$(mktemp -d)"
-GOUP_TEST_HOME="$(mktemp -d)"
-FEATURE_ROOT="$(cd "$FEATURE_ROOT" && pwd -P)"
-trap 'rm -rf "$TEST_HOME" "$CONFLICT_HOME" "$LEGACY_HOME" "$FEATURE_ROOT" "$FEATURE_HOME" "$BREW_TEST_ROOT" "$CLI_TEST_ROOT" "$CLI_TEST_HOME" "$BOOTSTRAP_ROOT" "$BOOTSTRAP_HOME" "$GOUP_TEST_ROOT" "$GOUP_TEST_HOME"' EXIT
+TEST_ROOT="$(mktemp -d)"
+TEST_ROOT="$(cd "$TEST_ROOT" && pwd -P)"
+TEST_HOME="$TEST_ROOT/home"
+CONFLICT_HOME="$TEST_ROOT/conflict-home"
+LEGACY_HOME="$TEST_ROOT/legacy-home"
+FEATURE_ROOT="$TEST_ROOT/feature"
+FEATURE_HOME="$TEST_ROOT/feature-home"
+BREW_TEST_ROOT="$TEST_ROOT/brew"
+CLI_TEST_ROOT="$TEST_ROOT/cli"
+CLI_TEST_HOME="$TEST_ROOT/cli-home"
+BOOTSTRAP_ROOT="$TEST_ROOT/bootstrap"
+BOOTSTRAP_HOME="$TEST_ROOT/bootstrap-home"
+GOUP_TEST_ROOT="$TEST_ROOT/goup"
+GOUP_TEST_HOME="$TEST_ROOT/goup-home"
+HERDR_TEST_ROOT="$TEST_ROOT/herdr"
+CODEX_TEST_ROOT="$TEST_ROOT/codex"
+mkdir -p "$TEST_HOME" "$CONFLICT_HOME" "$LEGACY_HOME" "$FEATURE_ROOT" "$FEATURE_HOME" \
+  "$BREW_TEST_ROOT" "$CLI_TEST_ROOT" "$CLI_TEST_HOME" "$BOOTSTRAP_ROOT" "$BOOTSTRAP_HOME" \
+  "$GOUP_TEST_ROOT" "$GOUP_TEST_HOME" "$HERDR_TEST_ROOT" "$CODEX_TEST_ROOT"
+trap 'rm -rf "$TEST_ROOT"' EXIT
 
 bash -n "$ROOT/install.sh" "$ROOT/scripts/install-deps.sh" "$ROOT/scripts/installers/goup.sh" "$ROOT/scripts/check-private.sh" "$ROOT/features/herdr/install-plugins.sh"
 # 再用 macOS 自带的 3.2 过一遍：上面那个 bash 来自 PATH，本机可能是 5.x，抓不到
@@ -164,6 +170,54 @@ PATH="$GOUP_TEST_ROOT/bin:$GOUP_TEST_HOME/.goup/current/bin:/usr/bin:/bin" HOME=
   "$ROOT/scripts/installers/goup.sh" check
 PATH="$GOUP_TEST_ROOT/bin:/usr/bin:/bin" HOME="$GOUP_TEST_HOME" "$ROOT/scripts/installers/goup.sh" clean
 PATH="$GOUP_TEST_ROOT/bin:/usr/bin:/bin" HOME="$GOUP_TEST_HOME" "$ROOT/scripts/installers/goup.sh" clean
+
+# Herdr plugin failures are aggregated, and an installed disabled plugin is enabled.
+mkdir -p "$HERDR_TEST_ROOT/bin"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'if [[ "$1 $2" == "plugin list" ]]; then' \
+  '  echo "- heeler (heeler) disabled [github:ZingerLittleBee/Heeler/plugin@main]"' \
+  'elif [[ "$1 $2" == "plugin install" ]]; then' \
+  '  echo "install $3" >> "$HERDR_TEST_LOG"' \
+  '  [[ "$3" != cinco/herdr-grep-nvim ]]' \
+  'elif [[ "$1 $2" == "plugin enable" ]]; then' \
+  '  echo "enable $3" >> "$HERDR_TEST_LOG"' \
+  'else' \
+  '  exit 1' \
+  'fi' > "$HERDR_TEST_ROOT/bin/herdr"
+chmod +x "$HERDR_TEST_ROOT/bin/herdr"
+: > "$HERDR_TEST_ROOT/herdr.log"
+if PATH="$HERDR_TEST_ROOT/bin:/usr/bin:/bin" HERDR_TEST_LOG="$HERDR_TEST_ROOT/herdr.log" \
+  "$ROOT/features/herdr/install-plugins.sh" install >/dev/null 2>&1; then
+  echo "Herdr plugin installation ignored a failed plugin" >&2
+  exit 1
+fi
+grep -Fqx 'enable heeler' "$HERDR_TEST_ROOT/herdr.log"
+grep -Fqx 'install ntindle/herdr-resurrect' "$HERDR_TEST_ROOT/herdr.log"
+if grep -Fq 'install ZingerLittleBee/Heeler/plugin' "$HERDR_TEST_ROOT/herdr.log"; then
+  echo "Herdr reinstalled a disabled plugin instead of enabling it" >&2
+  exit 1
+fi
+
+# Codex skips only harmless trust prompts; project config still requires consent.
+if command -v fish >/dev/null 2>&1; then
+  FISH_BIN="$(command -v fish)"
+  mkdir -p "$CODEX_TEST_ROOT/bin" "$CODEX_TEST_ROOT/repo/child"
+  git -C "$CODEX_TEST_ROOT/repo" init -q
+  CODEX_REPO_ROOT="$(git -C "$CODEX_TEST_ROOT/repo" rev-parse --show-toplevel)"
+  printf '#!/usr/bin/env bash\nprintf '\''%%s\\n'\'' "$@" > "$CODEX_TEST_LOG"\n' > "$CODEX_TEST_ROOT/bin/codex"
+  chmod +x "$CODEX_TEST_ROOT/bin/codex"
+  PATH="$CODEX_TEST_ROOT/bin:/usr/bin:/bin" CODEX_TEST_LOG="$CODEX_TEST_ROOT/codex.log" \
+    CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$CODEX_TEST_ROOT/repo" \
+    "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex launch'
+  grep -Fqx -- '-c' "$CODEX_TEST_ROOT/codex.log"
+  grep -Fqx "projects.\"$CODEX_REPO_ROOT\".trust_level=\"untrusted\"" "$CODEX_TEST_ROOT/codex.log"
+  mkdir "$CODEX_TEST_ROOT/repo/.codex"
+  PATH="$CODEX_TEST_ROOT/bin:/usr/bin:/bin" CODEX_TEST_LOG="$CODEX_TEST_ROOT/codex.log" \
+    CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$CODEX_TEST_ROOT/repo" \
+    "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex launch'
+  [[ "$(cat "$CODEX_TEST_ROOT/codex.log")" == launch ]]
+fi
 
 # A custom installer gives arbitrary Git/download flows the same lifecycle.
 mkdir -p "$CLI_TEST_ROOT/scripts/installers" "$CLI_TEST_ROOT/bin"
