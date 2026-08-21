@@ -3,7 +3,7 @@
 # Herdr 插件不是 CLI，装不进 cli.conf 的 brew/cargo 那套，但 herdr 自己有
 # `herdr plugin install`，所以走 script installer 这个口子。
 #
-# 为什么必须声明：configs/herdr/config.toml 里有 7 个键绑在 plugin_action 上，
+# 为什么必须声明：configs/herdr/config.toml 里有多个键绑在 plugin_action 上，
 # 而 plugins.json 和 plugins/github/ 都在 .gitignore 里（220M 的插件代码不该进仓库）。
 # 不声明的话，新机器 install.sh 跑完、config.toml 也链好了，prefix+t / prefix+p /
 # prefix+g 这些键全是死的 —— 插件根本不存在。
@@ -23,10 +23,11 @@ thanhdat77/herdr-navigator|v0.3.5|herdr-navigator
 persiyanov/herdr-reviewr|v0.29.0|persiyanov.reviewr
 AkashJana18/herdr-scratch|main|herdr.scratch
 ntindle/herdr-resurrect|main|ntindle.herdr-resurrect
+rmarganti/herdr-pluck|v0.3.1|rmarganti.herdr-pluck
 '
-# 关于上面两个 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
+# 关于上面的 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
 # main 已经跑在 v1.0.1 tag 前面了 —— 写 v1.0.1 反而会把新机器装回更旧的代码。
-# resurrect 干脆没发过 tag。所以这两个只能跟 main。
+# resurrect 没发过 tag，所以只能跟 main。
 
 # `herdr plugin list` 每行形如 "- grep-nvim (grep-nvim) enabled [github:...]"。
 # 用 -F 而不是正则：plugin_id 里有 "." （herdr.scratch），正则会把它当任意字符。
@@ -53,17 +54,18 @@ apply_plugin() {
 
   case "$ACTION" in
     check)
-      [[ "$line" == *" enabled "* ]] || FAILED="${FAILED}$id "
+      [[ "$line" == *" enabled "* && "$line" == *"@$ref]" ]] || FAILED="${FAILED}$id "
       ;;
     install)
-      if [[ "$line" == *" enabled "* ]]; then
+      if [[ "$line" == *" enabled "* && "$line" == *"@$ref]" ]]; then
         echo "Already installed: herdr plugin $id"
-      elif [[ -n "$line" ]]; then
+      elif [[ -n "$line" && "$line" == *"@$ref]" ]]; then
         echo "Enabling herdr plugin: $id"
         herdr plugin enable "$id" || FAILED="${FAILED}$id "
       else
         echo "Installing herdr plugin: $id ($spec @ $ref)"
-        herdr plugin install "$spec" --ref "$ref" --yes || FAILED="${FAILED}$id "
+        # Pluck 会读这个命名空间化开关跳过无 checksum 的预编译包；其他插件忽略它。
+        HERDR_PLUCK_BUILD_FROM_SOURCE=1 herdr plugin install "$spec" --ref "$ref" --yes || FAILED="${FAILED}$id "
       fi
       ;;
     clean)

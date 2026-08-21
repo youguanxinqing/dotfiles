@@ -192,8 +192,10 @@ printf '%s\n' \
   '#!/usr/bin/env bash' \
   'if [[ "$1 $2" == "plugin list" ]]; then' \
   '  echo "- heeler (heeler) disabled [github:ZingerLittleBee/Heeler/plugin@main]"' \
+  '  echo "- rmarganti.herdr-pluck (Herdr Pluck) enabled [github:rmarganti/herdr-pluck@v0.3.0]"' \
   'elif [[ "$1 $2" == "plugin install" ]]; then' \
   '  echo "install $3" >> "$HERDR_TEST_LOG"' \
+  '  [[ "$3" != rmarganti/herdr-pluck ]] || echo "pluck source=${HERDR_PLUCK_BUILD_FROM_SOURCE:-0}" >> "$HERDR_TEST_LOG"' \
   '  [[ "$3" != cinco/herdr-grep-nvim ]]' \
   'elif [[ "$1 $2" == "plugin enable" ]]; then' \
   '  echo "enable $3" >> "$HERDR_TEST_LOG"' \
@@ -209,6 +211,8 @@ if PATH="$HERDR_TEST_ROOT/bin:/usr/bin:/bin" HERDR_TEST_LOG="$HERDR_TEST_ROOT/he
 fi
 grep -Fqx 'enable heeler' "$HERDR_TEST_ROOT/herdr.log"
 grep -Fqx 'install ntindle/herdr-resurrect' "$HERDR_TEST_ROOT/herdr.log"
+grep -Fqx 'install rmarganti/herdr-pluck' "$HERDR_TEST_ROOT/herdr.log"
+grep -Fqx 'pluck source=1' "$HERDR_TEST_ROOT/herdr.log"
 if grep -Fq 'install ZingerLittleBee/Heeler/plugin' "$HERDR_TEST_ROOT/herdr.log"; then
   echo "Herdr reinstalled a disabled plugin instead of enabling it" >&2
   exit 1

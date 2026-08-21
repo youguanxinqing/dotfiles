@@ -179,6 +179,14 @@ type = "plugin_action"
 command = "herdr.scratch.lazygit"
 description = "toggle lazygit scratchpad"
 
+# Pluck: 镜像当前可见画面，给路径、URL、SHA、IP 等 token 标短 hint，选中即复制。
+# 上游示例的 prefix+q 已被 pane picker 使用，复用 Talon 腾出的 prefix+space。
+[[keys.command]]
+key = "prefix+space"
+type = "plugin_action"
+command = "rmarganti.herdr-pluck.pluck"
+description = "pluck visible token"
+
 # 跳到下一个 blocked / done 的 agent，连按循环。working / idle 的一律不跳 ——
 # 内建 next_agent 会把它们一起轮进来，挂 10 个的时候要多按好几下。
 [[keys.command]]
