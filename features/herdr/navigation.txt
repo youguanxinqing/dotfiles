@@ -1,1 +1,16 @@
+# 这里刻意按单个文件映射，和仓库其它 config 按目录映射的做法不一样，原因有两个：
+#
+# 1. ~/.config/herdr 本身不能整体软链回仓库。它下面还有 plugins/github/（220M 插件
+#    代码）、session.json、sessions/、日志 —— 那些是运行时状态，仓库不该装它们。
+# 2. plugins/config 这一层也不能按目录映射：`herdr plugin install` 会先给每个插件
+#    建好 plugins/config/<id>/ 目录，而 install.sh 是先装依赖后建链接，等轮到建链接
+#    的时候目标目录已经存在，linker 会判成 "Skipped unmanaged path" 直接跳过，
+#    新机器上插件配置就永远链不上。
+#
+# 代价：新插件的配置文件要手动在这里加一行。判断标准看 .gitignore 里那份白名单
+# （config.toml / settings.json / allowlist.txt）—— 插件自己写的运行时文件不用管。
 configs/herdr/config.toml => ~/.config/herdr/config.toml
+configs/herdr/plugins/config/herdr-navigator/config.toml => ~/.config/herdr/plugins/config/herdr-navigator/config.toml
+configs/herdr/plugins/config/ntindle.herdr-resurrect/allowlist.txt => ~/.config/herdr/plugins/config/ntindle.herdr-resurrect/allowlist.txt
+configs/herdr/plugins/config/ntindle.herdr-resurrect/settings.json => ~/.config/herdr/plugins/config/ntindle.herdr-resurrect/settings.json
+configs/herdr/plugins/config/persiyanov.reviewr/config.toml => ~/.config/herdr/plugins/config/persiyanov.reviewr/config.toml
