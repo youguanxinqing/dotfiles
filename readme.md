@@ -128,9 +128,10 @@ automatically.
 
 The root `navigation.txt` contains core links; optional features use their own `navigation.txt`.
 Fish, Kitty, WezTerm, and Ghostty link their full configuration directories. tmux links
-`~/.tmux.conf`; its helper commands are published with the other commands in `~/.local/bin`. Herdr links only `config.toml`, preserving its
-plugin and runtime directories. Existing unmanaged destinations are reported and skipped; the
-installer never overwrites them or blocks the remaining incremental work.
+`~/.tmux.conf`; its helper commands are published with the other commands in `~/.local/bin`. Herdr
+links only the declared config files, preserving plugin code and runtime directories. Existing
+unmanaged destinations are reported and skipped; the installer never overwrites them or blocks the
+remaining incremental work.
 
 `bin/` is the source of personal commands. The installer links each executable into
 `~/.local/bin`, and Fish adds that standard directory to `PATH`, so commands keep working when the
@@ -158,15 +159,12 @@ ever committed.
 ## Herdr plugins
 
 ```bash
-herdr plugin install thanhdat77/herdr-navigator --ref v0.3.5 --yes
-herdr plugin install cinco/herdr-grep-nvim --ref v1.0.3 --yes
-herdr plugin install ntindle/herdr-resurrect --yes
-herdr plugin install persiyanov/herdr-reviewr --ref v0.29.0 --yes
-herdr server reload-config
+./install.sh --deps-only
 ```
 
-The Herdr plugins require `fzf`, `rg`, `bat`, `nvim`, `node`, and `gh`. They are declared in the root
-CLI manifest, and FNM manages Node.
+The exact plugin sources and refs live in `features/herdr/install-plugins.sh`. The plugins require
+`fzf`, `rg`, `bat`, `nvim`, `node`, and `gh`; those commands are declared in the root CLI manifest,
+and FNM manages Node.
 
 ## Fonts
 

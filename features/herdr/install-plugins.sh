@@ -33,68 +33,55 @@ ntindle/herdr-resurrect|main|ntindle.herdr-resurrect
 #
 # 只查一次存到变量里，不要每个插件都跑一遍 herdr：`grep -q` 命中就退出、把管道关掉，
 # 连着 6 次 SIGPIPE 下来 herdr 会漏报，实测有的插件明明装了也说没装。
-PLUGIN_LIST=""
-load_plugin_list() {
-  PLUGIN_LIST="$(herdr plugin list 2>/dev/null || true)"
-}
-
-plugin_installed() {
-  case "$PLUGIN_LIST" in
-    *"- $1 ("*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-each_plugin() {
-  # bash 3.2 没有 mapfile，也不用进程替换，直接喂 here-string。
-  while IFS='|' read -r spec ref id; do
-    [[ -n "${id:-}" ]] || continue
-    "$1" "$spec" "$ref" "$id"
-  done <<< "$(printf '%s\n' "$PLUGINS" | grep -v '^[[:space:]]*$')"
-}
-
-check_one() {
-  plugin_installed "$3" || { MISSING="${MISSING:-}$3 "; }
-}
-
-install_one() {
-  if plugin_installed "$3"; then
-    echo "Already installed: herdr plugin $3"
-    return
-  fi
-  echo "Installing herdr plugin: $3 ($1 @ $2)"
-  herdr plugin install "$1" --ref "$2" --yes
-}
-
-clean_one() {
-  plugin_installed "$3" || return 0
-  # uninstall 没有 --yes，install 有。
-  herdr plugin uninstall "$3"
-}
-
-case "${1:-}" in
-  check)
-    command -v herdr >/dev/null 2>&1 || exit 1
-    load_plugin_list
-    MISSING=""
-    each_plugin check_one
-    [[ -z "$MISSING" ]] || exit 1
-    ;;
-  install)
-    command -v herdr >/dev/null 2>&1 || {
-      echo "herdr is required before its plugins can be installed." >&2
-      exit 1
-    }
-    load_plugin_list
-    each_plugin install_one
-    ;;
-  clean)
-    command -v herdr >/dev/null 2>&1 || exit 0
-    load_plugin_list
-    each_plugin clean_one
-    ;;
-  *)
-    echo "Usage: $0 check|install|clean" >&2
-    exit 2
-    ;;
+ACTION="${1:-}"
+case "$ACTION" in
+  check) command -v herdr >/dev/null 2>&1 || exit 1 ;;
+  install) command -v herdr >/dev/null 2>&1 || {
+    echo "herdr is required before its plugins can be installed." >&2
+    exit 1
+  } ;;
+  clean) command -v herdr >/dev/null 2>&1 || exit 0 ;;
+  *) echo "Usage: $0 check|install|clean" >&2; exit 2 ;;
 esac
+
+PLUGIN_LIST="$(herdr plugin list)"
+FAILED=""
+
+apply_plugin() {
+  local spec="$1" ref="$2" id="$3" line
+  line="$(printf '%s\n' "$PLUGIN_LIST" | grep -F -m 1 -- "- $id (" || true)"
+
+  case "$ACTION" in
+    check)
+      [[ "$line" == *" enabled "* ]] || FAILED="${FAILED}$id "
+      ;;
+    install)
+      if [[ "$line" == *" enabled "* ]]; then
+        echo "Already installed: herdr plugin $id"
+      elif [[ -n "$line" ]]; then
+        echo "Enabling herdr plugin: $id"
+        herdr plugin enable "$id" || FAILED="${FAILED}$id "
+      else
+        echo "Installing herdr plugin: $id ($spec @ $ref)"
+        herdr plugin install "$spec" --ref "$ref" --yes || FAILED="${FAILED}$id "
+      fi
+      ;;
+    clean)
+      [[ -n "$line" ]] || return 0
+      # uninstall 没有 --yes，install 有。
+      herdr plugin uninstall "$id" || FAILED="${FAILED}$id "
+      ;;
+  esac
+  return 0
+}
+
+# bash 3.2 没有 mapfile，直接喂 here-string。
+while IFS='|' read -r spec ref id; do
+  [[ -n "${id:-}" ]] || continue
+  apply_plugin "$spec" "$ref" "$id"
+done <<< "$PLUGINS"
+
+[[ -z "$FAILED" ]] || {
+  [[ "$ACTION" == check ]] || echo "Herdr plugin $ACTION failed: $FAILED" >&2
+  exit 1
+}
