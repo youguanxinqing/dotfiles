@@ -57,6 +57,7 @@ features/<name>/navigation.txt
 scripts/install-deps.sh     CLI installer implementation
 scripts/installers/         Custom installers used only when a standard installer is insufficient
 configs/<name>/             Application and shell configuration sources
+docs/                       Conventions and pitfalls, loaded on demand from CLAUDE.md
 ```
 
 Application and shell configuration lives under `configs/`; executable commands remain in `bin/`,
