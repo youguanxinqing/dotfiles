@@ -23,7 +23,12 @@ GOUP_TEST_HOME="$(mktemp -d)"
 FEATURE_ROOT="$(cd "$FEATURE_ROOT" && pwd -P)"
 trap 'rm -rf "$TEST_HOME" "$CONFLICT_HOME" "$LEGACY_HOME" "$FEATURE_ROOT" "$FEATURE_HOME" "$BREW_TEST_ROOT" "$CLI_TEST_ROOT" "$CLI_TEST_HOME" "$BOOTSTRAP_ROOT" "$BOOTSTRAP_HOME" "$GOUP_TEST_ROOT" "$GOUP_TEST_HOME"' EXIT
 
-bash -n "$ROOT/install.sh" "$ROOT/scripts/install-deps.sh" "$ROOT/scripts/installers/goup.sh" "$ROOT/scripts/check-private.sh"
+bash -n "$ROOT/install.sh" "$ROOT/scripts/install-deps.sh" "$ROOT/scripts/installers/goup.sh" "$ROOT/scripts/check-private.sh" "$ROOT/features/herdr/install-plugins.sh"
+# 再用 macOS 自带的 3.2 过一遍：上面那个 bash 来自 PATH，本机可能是 5.x，抓不到
+# bash 4+ 的写法，而新机器上跑的就是 /bin/bash。
+if [[ -x /bin/bash ]]; then
+  /bin/bash -n "$ROOT/install.sh" "$ROOT/scripts/install-deps.sh" "$ROOT/scripts/installers/goup.sh" "$ROOT/scripts/check-private.sh" "$ROOT/features/herdr/install-plugins.sh"
+fi
 HOME="$TEST_HOME" "$ROOT/install.sh" --links-only fish herdr hammerspoon tmux bin
 HOME="$TEST_HOME" "$ROOT/install.sh" --links-only fish herdr hammerspoon tmux bin
 
