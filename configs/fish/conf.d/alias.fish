@@ -1,4 +1,10 @@
 
+# alias for coding agents
+# opus 是别名，跟最新的 Opus 走，不写死 claude-opus-5
+alias claude="claude --permission-mode auto --model opus --effort max"
+# codex 不需要 alias：model / reasoning effort 在 ~/.codex/config.toml，
+# 目录信任要在启动前算，见 functions/codex.fish
+
 # alias for git
 abbr -a gits "git status"
 abbr -a gitd "git diff"
