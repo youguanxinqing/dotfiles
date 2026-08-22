@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Vendored from github.com/griffinqiu/dotfiles bin/herdr-smart-tab @ ab7f4df;
-# kept verbatim below this header so future upstream diffs stay clean.
+# Vendored from github.com/griffinqiu/dotfiles bin/herdr-smart-tab @ ab7f4df.
+# One local delta: the "plain" mode (prefix+c) and the empty-base handling it
+# needs. Everything else is upstream verbatim, so future diffs stay clean.
 #
 # Reproduce the tmux a/A window-creation behavior for Herdr tabs.
 #
@@ -14,16 +15,18 @@
 # tab's group name, with the whole group renumbered by position; appending at
 # the end joins the last tab's group. Every tab also carries a "N." position
 # prefix so prefix+1..9 switching stays predictable (Herdr shows no indices).
+# "plain" opts out of all of it: the tab gets no name, so its label is just the
+# position prefix.
 
 set -euo pipefail
 
 usage() {
-  printf 'usage: herdr-smart-tab <before|after|first|last|close-tab|close-pane|renumber|renumber-all>\n' >&2
+  printf 'usage: herdr-smart-tab <before|after|first|last|plain|close-tab|close-pane|renumber|renumber-all>\n' >&2
 }
 
 mode="${1:-}"
 case "$mode" in
-  before | after | first | last | close-tab | close-pane | renumber | renumber-all) ;;
+  before | after | first | last | plain | close-tab | close-pane | renumber | renumber-all) ;;
   *)
     usage
     exit 2
@@ -179,6 +182,9 @@ rename_tab() {
 # Rename all group members in display order: base, baseⅱ, baseⅲ, ...
 renumber_group() {
   local base="$1"
+  # An unnamed tab is not a group. Without this, every unnamed tab in the
+  # workspace shares the empty base and gets herded into one group: "", ⅱ, ⅲ.
+  [ -n "$base" ] || return 0
   local tabs_json item item_id item_label target_label index
   local -a group_ids group_labels
 
@@ -343,9 +349,9 @@ elif [ "$mode" = "last" ]; then
 fi
 
 create_args=(tab create --workspace "$workspace_id" --cwd "$pane_cwd" --focus)
-if [ -n "$base" ]; then
-  create_args+=(--label "$base")
-fi
+# Always pass --label, empty included: Herdr's own default label is the tab
+# count, which renumber_all would then double up into "5.5".
+create_args+=(--label "$base")
 
 if ! create_response="$("$herdr_bin" "${create_args[@]}")"; then
   die "could not create tab"

@@ -154,12 +154,14 @@ command = '"${HOME}/.local/bin/herdr-smart-tab" last'
 description = "new tab at end (tmux A)"
 
 # prefix+c 是被上面 new_tab = "" 禁掉的默认建 tab 键，接回脚本保住肌肉记忆。
-# 语义同 tmux c：建到最后。注意会继承最后一个 tab 的组名，要干净名字建完改名。
+# 语义同 tmux c：建到最后，但走 plain —— 不继承任何组名，label 只剩位置序号
+# ("5.")。i/a/I/A 是"再来一个同类"，继承组名是对的；c 是"开个新的"，继承等于
+# 每次建完都要改名。不经过 herdr 内建的建 tab 弹窗，按下去就有。
 [[keys.command]]
 key = "prefix+c"
 type = "shell"
-command = '"${HOME}/.local/bin/herdr-smart-tab" last'
-description = "new tab at end (tmux c)"
+command = '"${HOME}/.local/bin/herdr-smart-tab" plain'
+description = "new tab at end, unnamed (tmux c)"
 
 [[keys.command]]
 key = "prefix+x"
