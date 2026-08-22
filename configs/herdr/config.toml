@@ -19,6 +19,23 @@ delivery = "off"
 name = "nord"
 auto_switch = false
 
+# popup（scratch）的边框吃 palette.accent，不是 [ui] accent —— 后者在 herdr 0.8.2
+# 里是 dead_code，只留着兼容旧配置，改了没有任何效果。nord 的 accent 是亮青
+# #88c0d0，衬在暗底上又亮又抢眼；退到 nord10 (#5e81ac) 就安静下来。不能再往暗
+# 走：accent 同时是 active tab 的底色（src/ui/tabs.rs:394 .bg(p.accent)），设成
+# nord3 会正好撞上 inactive tab 的文字色 overlay0，整条 tab bar 糊成一片。
+#
+# panel_bg 是 popup 整个外框先刷的那层底色（nord #2e3440，比终端底色浅）。
+# src/popup_size.rs 里 terminal_cols = inner_width - 1，右边硬编码留一列空槽，
+# 露出的就是这层底 —— 所以右边看着是两条线。空槽改不掉，但把底色对齐 ghostty 的
+# background (#1d1f21，见 configs/ghostty/config) 之后它就看不见了，边框只剩一格
+# 单线。写死 hex 而不是 "reset"：reset 会让 panel_contrast_fg 回退到 surface_dim，
+# active tab 的字就没对比度了（src/ui/widgets.rs panel_contrast_fg）。
+# 代价：panel_bg 也管 tab bar 和各种浮层面板，它们会一起用终端底色。
+[theme.custom]
+accent = "#5e81ac"
+panel_bg = "#1d1f21"
+
 # Pane 切换。列表形式让两套键同时生效：
 #   ctrl+alt+hjkl —— 直接按，不用先按 prefix，日常就用这个
 #   prefix+hjkl   —— 保留默认键当退路（ghostty 只把 left-Option 当 alt）
