@@ -46,15 +46,15 @@ out of the repo.
 
 ## Write scripts for bash 3.2
 
-A new machine has no other bash — `cli.conf` does not declare one — so
-`#!/usr/bin/env bash` resolves to macOS's `/bin/bash` 3.2. `test-install.sh`
-runs an extra `/bin/bash -n` pass, because the bash on PATH may be 5.x and will
-happily accept bash 4+ syntax that 3.2 rejects. Add new scripts to both lines.
+A new machine has no other bash yet, so `#!/usr/bin/env bash` resolves to
+macOS's `/bin/bash` 3.2. `scripts/test-install.sh` automatically discovers every
+Git-visible shell script and runs an extra `/bin/bash -n` pass, because the bash
+on PATH may be 5.x and will happily accept bash 4+ syntax that 3.2 rejects.
 
 ## Load on demand
 
-- Changing directory structure, or adding or editing a `navigation.txt`
-  mapping → `docs/structure.md`
+- Changing directory structure, module links, or module discovery →
+  `docs/structure.md`
 - Adding a tool or plugin, changing a version ref, or investigating why one
   machine behaves differently from another → `docs/dependencies.md`
 - Confirming a change actually took effect, or a long-running process still

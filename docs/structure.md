@@ -1,51 +1,45 @@
-# Directory structure and mapping
+# Module structure and links
 
-Read this when changing the structure under `configs/`, or adding or editing a
-`navigation.txt` mapping.
+Read this when changing directory structure, module discovery, or link behavior.
+Safety rules in `CLAUDE.md` still apply and outrank everything here: a
+restructure can relink paths a running machine depends on.
 
-Safety rules in `CLAUDE.md` still apply, and outrank everything here: a
-restructure deletes and relinks paths a running machine depends on.
+## Modules are the extension boundary
 
-## navigation.txt maps directories by default
+`install.sh` discovers `modules/*/module.ini`. A module owns its platform,
+dependencies, links, lifecycle hooks, and tests. Adding a capability must not
+require a new root switch, manifest entry, syntax path, or test-runner entry.
 
-A directory map is what guarantees files added under it get managed
-automatically and nothing is silently left behind. A program writing runtime
-files into the same directory is fine — the allowlist in `.gitignore` decides
-what gets committed.
+Prefer `modules/<name>/home/` for new files. Its contents overlay `$HOME` by
+relative path, so adding another file later requires no metadata change.
+Discovery uses Git-visible files (`--cached --others --exclude-standard`), which
+keeps ignored logs, caches, credentials, and generated state out of the link
+set.
 
-Use a per-file map only where a directory map breaks, and **record the reason in
-the manifest**. The one known exception, with its reason, is at the top of
-`features/herdr/navigation.txt`: `herdr plugin install` pre-creates
-`plugins/config/<id>/`, and `install.sh` links after installing dependencies, so
-by link time the target directory already exists and gets reported as
-`Skipped unmanaged path`.
+`[link <id>]` sections in `module.ini` exist for stable shared sources such as
+the legacy `configs/` and `bin/` trees. Use `tree` when the application expects
+a complete directory and does not write runtime state inside it. Use `overlay`
+when tracked config and untracked runtime state must coexist.
 
-## The linker compares paths as strings
+## Ownership is explicit
 
-`install.sh` compares `readlink` output against `$ROOT` as a raw string, so a
-case-variant but equivalent path (`~/projects/dotfiles` against
-`~/Projects/dotfiles`) is reported as `Skipped unmanaged path` and passed over.
-The link then looks like it was never created, when it was actually skipped.
+Each successful or already-correct link is recorded in the state file. Cleanup
+requires all three values to agree: module, target, and current source. A target
+that has been replaced or repointed is skipped. Parent directories are never
+removed because the installer cannot prove ownership of everything inside.
 
-Check the literal string with `readlink` first when debugging this. The real fix
-is resolving both sides through `realpath` before comparing.
+Repository-owned links can be relinked after a source move. Unmanaged files,
+directories, and links are skipped. `readlink` comparisons are literal; a clone
+reached through a case-variant or non-canonical path can therefore look
+different even when the filesystem resolves it to the same place.
 
-## git will not move what gitignore hides
+## Keep runtime state outside the repository
 
-When restructuring, `git mv` only touches tracked files. The gitignored
-machine-local layer stays where it was — and it is often the layer that
-matters. `configs/fish/local.d/local.fish` is the only thing on this machine
-that puts `/opt/nanobrew/prefix/bin` on PATH, and `nvim`, `tmux`, `rg`, `fd`,
-`fnm`, `overmind`, and `direnv` all resolve there.
+`configs/` and module `home/` directories hold only what a human wrote. Logs,
+sockets, sessions, plugin downloads, and registries remain in the real home
+directory and should be ignored before they are created in the repo.
 
-Moving the fish config means carrying `local.d/`, `conf.d/pyenv.fish`, and
-`conf.d/variables/proxy.fish` across by hand, then verifying `command -v` in a
-fresh login fish.
-
-Leave `fish_variables` behind. Its `fish_user_paths` holds dead
-`/home/<name>/...` paths from another machine, and
-`configs/fish/conf.d/paths.fish` owns PATH now.
-
-After the move the old directories become orphans: untracked, and no longer
-matched by the new ignore rules. Delete them, or `check-private.sh` will scan
-the logs inside them and fail on the home paths there.
+When moving a legacy config, remember that `git mv` does not carry ignored
+machine-local files. Inspect ignored files separately, preserve the ones that
+represent intentional local configuration, and leave generated state behind.
+Run `scripts/check-private.sh` after the move.

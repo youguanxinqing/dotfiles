@@ -1,0 +1,15 @@
+[Unit]
+Description=mihomo Daemon, Another Clash Kernel
+After=network.target NetworkManager.service systemd-networkd.service iwd.service
+
+[Service]
+Type=simple
+LimitNPROC=4096
+LimitNOFILE=65536
+Restart=always
+ExecStartPre=/usr/bin/sleep 1s
+ExecStart=%h/.local/bin/mihomo -d %h/.config/mihomo
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=default.target

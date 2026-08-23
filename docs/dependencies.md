@@ -21,9 +21,9 @@ is gitignored — 220M does not belong in the repo. For a while nothing declared
 which plugins to install, so a new machine finished `install.sh` with every one
 of those keys dead.
 
-The fix is `features/herdr/install-plugins.sh`, using the `script` installer
-`cli.conf` already supports and implementing `check` / `install` / `clean`.
-Follow that pattern for anything else where config points outside the repo.
+The fix is `modules/herdr/install.sh`, using the module's `script` dependency
+and implementing `check` / `install` / `clean`. Follow that pattern for
+anything else where config points outside the repo.
 
 ## Installed ≠ right version ≠ right source
 
@@ -35,13 +35,13 @@ divergences:
   "herdr". Its theme rendering differed from another machine, and the cause took
   a while to find: 0.8.2 changed theme painting (release notes #2792, #2987).
 - **Wrong source.** `nvim`, `tmux`, `rg`, `fd`, `fnm`, `overmind`, and `direnv`
-  all come from `/opt/nanobrew/prefix/bin`, while `cli.conf` declares brew.
+  all come from `/opt/nanobrew/prefix/bin`, while their modules declare brew.
   `command -v` finds them, so the brew copies never get installed.
 
 `cli_is_managed` is the predicate that checks the real source
 (`brew list --formula`, `cargo install --list`, and so on), but it is only
 called on the clean path. Wiring it into `verify_manifest` would surface these;
-pinning versions would need a `min_version` field in `cli.conf`.
+pinning versions would need a `min_version` key in dependency sections.
 
 ## One trap when scripting against herdr
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Herdr 插件不是 CLI，装不进 cli.conf 的 brew/cargo 那套，但 herdr 自己有
+# Herdr 插件不是普通 CLI，不能直接走 brew/cargo，但 herdr 自己有
 # `herdr plugin install`，所以走 script installer 这个口子。
 #
 # 为什么必须声明：configs/herdr/config.toml 里有多个键绑在 plugin_action 上，

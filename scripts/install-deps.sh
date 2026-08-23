@@ -3,6 +3,8 @@
 set -eo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+# This consumes normalized, pipe-delimited manifests generated internally from
+# module.ini. Repository authors edit named INI fields, not this wire format.
 ACTION=install
 DRY_RUN=0
 CLI_MANIFESTS=()
@@ -15,7 +17,7 @@ while (($#)); do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --*)
-      echo "Usage: $0 [--dry-run] [cli.conf ...] | --clean [--dry-run] <cli.conf> [keep-cli.conf ...]" >&2
+      echo "Usage: $0 [--dry-run] <manifest> [...] | --clean [--dry-run] <manifest> [keep-manifest ...]" >&2
       exit 2
       ;;
     *) CLI_MANIFESTS+=("$1") ;;
@@ -344,7 +346,10 @@ if [[ "$ACTION" == clean ]]; then
   exit 0
 fi
 
-CLI_MANIFESTS=("$ROOT/cli.conf" "${CLI_MANIFESTS[@]}")
+((${#CLI_MANIFESTS[@]})) || {
+  echo "At least one dependency manifest is required." >&2
+  exit 2
+}
 if needs_brew "${CLI_MANIFESTS[@]}"; then
   BREW="$(find_brew || true)"
   if [[ -z "$BREW" ]] && ! install_homebrew; then
@@ -373,8 +378,3 @@ else
   done
   echo "CLI check passed."
 fi
-
-git config --global --get core.pager >/dev/null 2>&1 || run git config --global core.pager delta
-git config --global --get interactive.diffFilter >/dev/null 2>&1 || run git config --global interactive.diffFilter "delta --color-only"
-git config --global --get delta.navigate >/dev/null 2>&1 || run git config --global delta.navigate true
-git config --global --get merge.conflictStyle >/dev/null 2>&1 || run git config --global merge.conflictStyle zdiff3
