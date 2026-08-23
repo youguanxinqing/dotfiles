@@ -11,8 +11,10 @@ TEST_STATE="$TEST_ROOT/state/links.tsv"
 mkdir -p "$TEST_HOME"
 
 [[ -f "$ROOT/configs/kitty/theme.conf" ]] || { echo "Kitty theme must be a regular file." >&2; exit 1; }
-[[ -x "$ROOT/bin/tmux-cleanup-scratch" && -x "$ROOT/bin/tmux-swap-scratch" && -x "$ROOT/bin/tmux-toggle-scratch" ]] || {
-  echo "tmux helpers must be executable." >&2
+[[ -x "$ROOT/bin/tmux-cleanup-scratch" && -x "$ROOT/bin/tmux-swap-scratch" && \
+  -x "$ROOT/bin/tmux-toggle-scratch" && -x "$ROOT/bin/g-copy" && \
+  -x "$ROOT/bin/g-notify" ]] || {
+  echo "Bin helpers must be executable." >&2
   exit 1
 }
 

@@ -12,9 +12,9 @@ abbr -a gitd "git diff"
 abbr -a gitc "git commit -m \"\""
 
 
-# nvim copy
-if type -q xclip
-  abbr -a copy "xclip -selection c"
+# desktop clipboard
+if type -q g-copy
+  abbr -a copy "g-copy"
 end
 
 
@@ -55,5 +55,3 @@ abbr -a edit-local-fish-config "nvim ~/.config/fish/local.d/local.fish"
 abbr -a edit-nvim-config "cd ~/.config/nvim && nvim"
 # quick edit ssh config
 abbr -a edit-ssh-config "nvim ~/.ssh/config"
-
-

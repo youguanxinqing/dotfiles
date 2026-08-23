@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Show a desktop notification through the best backend for the current platform.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: g-notify --title <text> --message <text> [--agent <name>]
+
+Hammerspoon is preferred on macOS when it is running. Otherwise notifications
+use terminal-notifier on macOS and notify-send on Linux.
+EOF
+}
+
+title=""
+message=""
+agent=""
+have_title=false
+have_message=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title)
+      [[ $# -ge 2 ]] || { echo "g-notify: --title requires a value" >&2; exit 2; }
+      title=$2
+      have_title=true
+      shift 2
+      ;;
+    --message)
+      [[ $# -ge 2 ]] || { echo "g-notify: --message requires a value" >&2; exit 2; }
+      message=$2
+      have_message=true
+      shift 2
+      ;;
+    --agent)
+      [[ $# -ge 2 ]] || { echo "g-notify: --agent requires a value" >&2; exit 2; }
+      agent=$2
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "g-notify: unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ $have_title != true || $have_message != true ]]; then
+  usage >&2
+  exit 2
+fi
+
+platform=$(uname -s 2>/dev/null || printf 'unknown')
+
+# Values travel through the process environment instead of being interpolated
+# into Lua source. Workspace labels and directory names can therefore contain
+# quotes, brackets, and newlines without becoming executable Lua.
+if [[ $platform == Darwin ]] && command -v hs >/dev/null 2>&1 &&
+  pgrep -x Hammerspoon >/dev/null 2>&1; then
+  if [[ -n $agent ]]; then
+    lua='notificationToast({title=os.getenv("DOTFILES_NOTIFY_TITLE"), body=os.getenv("DOTFILES_NOTIFY_MESSAGE"), agent=os.getenv("DOTFILES_NOTIFY_AGENT"), align="right"})'
+  else
+    lua='notificationToast({title=os.getenv("DOTFILES_NOTIFY_TITLE"), body=os.getenv("DOTFILES_NOTIFY_MESSAGE")})'
+  fi
+
+  result=$(
+    DOTFILES_NOTIFY_TITLE="$title" \
+      DOTFILES_NOTIFY_MESSAGE="$message" \
+      DOTFILES_NOTIFY_AGENT="$agent" \
+      hs -t 1 -q -c "$lua" 2>/dev/null || true
+  )
+  [[ $result == ok ]] && exit 0
+fi
+
+# Native notification centers do not have Hammerspoon's separate agent badge,
+# so retain the previous compact fallback presentation.
+display_title=$title
+display_message=$message
+if [[ -n $agent ]]; then
+  display_title="✅ $agent"
+  display_message="$title · $message"
+fi
+
+if [[ $platform == Darwin ]] && command -v terminal-notifier >/dev/null 2>&1; then
+  exec terminal-notifier -title "$display_title" -message "$display_message"
+fi
+
+if [[ $platform == Linux ]] && command -v notify-send >/dev/null 2>&1; then
+  exec notify-send -a dotfiles "$display_title" "$display_message"
+fi
+
+echo "g-notify: no usable notification backend for $platform" >&2
+exit 1

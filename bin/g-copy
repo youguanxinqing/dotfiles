@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Copy stdin to the desktop clipboard without leaking platform checks into callers.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: g-copy
+
+Copy standard input to the current desktop clipboard.
+EOF
+}
+
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "g-copy: input must be provided on stdin" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+platform=$(uname -s 2>/dev/null || printf 'unknown')
+
+if [[ $platform == Darwin ]] && command -v pbcopy >/dev/null 2>&1; then
+  exec pbcopy
+fi
+
+# Prefer the native backend for the active Linux display session. Checking the
+# session variables avoids invoking a client that is installed but cannot reach
+# a compositor or X server (common in SSH and headless shells).
+if [[ -n ${WAYLAND_DISPLAY:-} ]] && command -v wl-copy >/dev/null 2>&1; then
+  exec wl-copy
+fi
+
+if [[ -n ${DISPLAY:-} ]] && command -v xclip >/dev/null 2>&1; then
+  exec xclip -selection clipboard
+fi
+
+if [[ -n ${DISPLAY:-} ]] && command -v xsel >/dev/null 2>&1; then
+  exec xsel --clipboard --input
+fi
+
+echo "g-copy: no usable clipboard backend (pbcopy, wl-copy, xclip, or xsel)" >&2
+exit 1

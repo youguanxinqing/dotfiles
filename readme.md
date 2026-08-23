@@ -91,6 +91,12 @@ state. `scripts/install-deps.sh` provides reusable package-manager adapters.
 Tests under `scripts/tests/*.test.sh` and `modules/*/test.sh`, plus all
 Git-visible shell scripts, are discovered without a maintained path list.
 
+Desktop integrations also have stable capability entry points. Scripts and
+configs should pipe clipboard data to `g-copy` and send notifications through
+`g-notify`, rather than naming `pbcopy`, `wl-copy`,
+`terminal-notifier`, or `notify-send` themselves. Both helpers are discovered
+and linked automatically by the existing `bin` module.
+
 ## Adding software
 
 For a standard package, add one author-facing file:
