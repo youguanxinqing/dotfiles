@@ -13,8 +13,11 @@ semantics that a flat directory of links cannot replace.
 fzf is installed by the `fzf` module through Homebrew. Fish automatically calls
 `functions/fish_user_key_bindings.fish`, which sources `fzf --fish` and enables:
 
-- `Ctrl-R`: fuzzy command-history search
+- `Ctrl-R`: fuzzy command-history search with classic one-based sequence numbers
 - `Ctrl-T`: fuzzy file/directory insertion
 - `Alt-C`: fuzzy directory change
+
+The sequence number is only picker metadata; it is removed before the selected
+command is inserted into the command line.
 
 Machine-local overrides belong in `~/.config/fish/local.d/local.fish`.

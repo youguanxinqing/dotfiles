@@ -9,6 +9,7 @@ source "${DOTFILES_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd 
 # integration owns the default Ctrl-R/Ctrl-T widgets.
 PATH_CONFIG="$ROOT/configs/fish/conf.d/10-paths.fish"
 FZF_BINDINGS="$ROOT/configs/fish/functions/fish_user_key_bindings.fish"
+FZF_HISTORY_WIDGET="$ROOT/configs/fish/functions/fzf-history-widget.fish"
 grep -Fq 'fish_add_path --global --move --path "$HOME/.local/bin"' "$PATH_CONFIG"
 grep -Fq 'set -qU fish_user_paths' "$PATH_CONFIG"
 if grep -Eq '\.fzf/bin|go/bin|\.cargo/bin|\.local/share/fnm|flutter/bin' "$PATH_CONFIG"; then
@@ -40,9 +41,23 @@ printf '%s\n' \
   > "$TEST_BIN/fzf"
 chmod +x "$TEST_BIN/fzf"
 bindings="$(PATH="$TEST_BIN:/usr/bin:/bin" FZF_BINDINGS="$FZF_BINDINGS" \
-  "$FISH_BIN" --no-config -c 'source "$FZF_BINDINGS"; fish_user_key_bindings; bind \\cr; bind \\ct')"
+  "$FISH_BIN" --no-config -c \
+  'source "$FZF_BINDINGS"; fish_user_key_bindings; bind \\cr; bind \\ct; printf "FZF_CTRL_R_OPTS=%s\n" "$FZF_CTRL_R_OPTS"')"
 assert_contains "$bindings" 'fzf-history-widget'
 assert_contains "$bindings" 'fzf-file-widget'
+assert_contains "$bindings" 'FZF_CTRL_R_OPTS=--with-nth=1..'
+
+# The classic fzf Fish widget used stable, one-based sequence numbers and
+# stripped them before inserting the selected command. Preserve multiline
+# history entries while producing that display format.
+printf 'first\0second\nline\0' | FZF_HISTORY_WIDGET="$FZF_HISTORY_WIDGET" \
+  "$FISH_BIN" --no-config -c '
+    source "$FZF_HISTORY_WIDGET"
+    set records (__dotfiles_number_fzf_history | string split0)
+    test (count $records) -eq 2
+    and test "$records[1]" = (printf "1\tfirst")
+    and test (string escape -- "$records[2]") = '"'"'2\tsecond\nline'"'"'
+  '
 
 # config.fish runs after every conf.d snippet. Reproduce an Omarchy-style
 # vendor package that installs its own prompt and fzf bindings, then verify the
@@ -63,11 +78,12 @@ printf '%s\n' \
 interactive="$(HOME="$INTERACTIVE_HOME" XDG_CONFIG_HOME="$INTERACTIVE_CONFIG_ROOT" \
   XDG_DATA_DIRS="$INTERACTIVE_VENDOR_ROOT" PATH="$TEST_BIN:/usr/bin:/bin" TERM=dumb \
   "$FISH_BIN" --interactive --command \
-  'fish_prompt; fish_right_prompt; bind \\cr; bind \\ct')"
+  'fish_prompt; fish_right_prompt; bind \\cr; bind \\ct; functions fzf-history-widget')"
 assert_contains "$interactive" '@'
 assert_contains "$interactive" '<<<'
 assert_contains "$interactive" 'fzf-history-widget'
 assert_contains "$interactive" 'fzf-file-widget'
+assert_contains "$interactive" '__dotfiles_number_fzf_history'
 if [[ "$interactive" == *vendor-prompt* || "$interactive" == *vendor-history* ]]; then
   echo "Vendor Fish UI was not overridden by the repository config" >&2
   exit 1
