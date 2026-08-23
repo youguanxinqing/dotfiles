@@ -215,23 +215,23 @@ install_cli() {
       run "$BREW" install --cask "$CLI_SOURCE"
       ;;
     cargo)
-      command -v cargo >/dev/null 2>&1 || { echo "cargo is required to install $CLI_ID." >&2; return 1; }
+      command -v cargo >/dev/null 2>&1 || ((DRY_RUN)) || { echo "cargo is required to install $CLI_ID." >&2; return 1; }
       run cargo install "$CLI_SOURCE"
       ;;
     fnm)
-      command -v fnm >/dev/null 2>&1 || { echo "fnm is required to install $CLI_ID." >&2; return 1; }
+      command -v fnm >/dev/null 2>&1 || ((DRY_RUN)) || { echo "fnm is required to install $CLI_ID." >&2; return 1; }
       if [[ "$CLI_SOURCE" == lts ]]; then run fnm install --lts; else run fnm install "$CLI_SOURCE"; fi
       ;;
     go)
-      command -v go >/dev/null 2>&1 || { echo "Go is required to install $CLI_ID; install it with goup first." >&2; return 1; }
+      command -v go >/dev/null 2>&1 || ((DRY_RUN)) || { echo "Go is required to install $CLI_ID; install it with goup first." >&2; return 1; }
       run go install "$CLI_SOURCE"
       ;;
     npm)
-      command -v npm >/dev/null 2>&1 || { echo "npm is required to install $CLI_ID." >&2; return 1; }
+      command -v npm >/dev/null 2>&1 || ((DRY_RUN)) || { echo "npm is required to install $CLI_ID." >&2; return 1; }
       run npm install --global "$CLI_SOURCE"
       ;;
     rustup)
-      command -v rustup >/dev/null 2>&1 || { echo "rustup is required to install $CLI_ID." >&2; return 1; }
+      command -v rustup >/dev/null 2>&1 || ((DRY_RUN)) || { echo "rustup is required to install $CLI_ID." >&2; return 1; }
       run rustup default "$CLI_SOURCE"
       ;;
     script)

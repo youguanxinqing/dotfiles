@@ -2,25 +2,26 @@
 
 set -euo pipefail
 
-find_fish() {
-  command -v fish 2>/dev/null || {
-    local candidate
-    for candidate in /usr/bin/fish /opt/homebrew/bin/fish /usr/local/bin/fish /home/linuxbrew/.linuxbrew/bin/fish; do
-      [[ -x "$candidate" ]] && { printf '%s\n' "$candidate"; return; }
-    done
-    return 1
-  }
-}
+FISH_MODULE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+# shellcheck source=modules/fish/platform.sh
+source "$FISH_MODULE_DIR/platform.sh"
 
-fish_bin="$(find_fish || true)"
+fish_bin="$(fish_find_binary || true)"
 [[ -n "$fish_bin" ]] || { echo "Fish was not found after dependency installation." >&2; exit 1; }
 
-login_shell=""
-current_user="${USER:-$(id -un)}"
-if command -v getent >/dev/null 2>&1; then
-  login_shell="$(getent passwd "$current_user" 2>/dev/null | awk -F: '{print $7}' || true)"
+if fish_is_omarchy; then
+  login_shell="$(fish_login_shell)"
+  if [[ "${login_shell##*/}" == fish ]]; then
+    echo "Omarchy must keep Bash as the login shell before enabling its Fish handoff." >&2
+    echo "Run 'chsh -s /usr/bin/bash', sign out, and run the installer again." >&2
+    exit 1
+  fi
+  fish_install_omarchy_handoff
+  echo "Omarchy detected: Bash remains the login shell and interactive terminals use Fish."
+  exit 0
 fi
-[[ -n "$login_shell" ]] || login_shell="${SHELL:-}"
+
+login_shell="$(fish_login_shell)"
 if [[ "$login_shell" == "$fish_bin" ]]; then
   echo "Fish is already the login shell: $fish_bin"
   exit 0

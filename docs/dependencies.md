@@ -25,6 +25,20 @@ The fix is `modules/herdr/install.sh`, using the module's `script` dependency
 and implementing `check` / `install` / `clean`. Follow that pattern for
 anything else where config points outside the repo.
 
+## A platform can need a native integration, not just a different package
+
+Fish is the example. macOS can use the shared Homebrew adapter, while Linux
+needs a module-local script: ordinary distributions install the system Fish
+package, but Omarchy installs `omarchy-fish` and keeps Bash as the login shell.
+The module detects Omarchy from `/etc/os-release` instead of asking the user to
+choose a mode.
+
+`modules/fish/platform.sh` owns that detection and the bounded `~/.bashrc`
+handoff. Runtime changes are backed up under
+`~/.local/state/dotfiles/backups/`, and the installer method is recorded in
+`~/.local/state/dotfiles/fish-installer` so an explicit clean never removes a
+Fish installation that this repository did not install.
+
 ## Installed ≠ right version ≠ right source
 
 `cli_is_installed` in `install-deps.sh` runs a bare `command -v`, so

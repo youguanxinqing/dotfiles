@@ -100,3 +100,26 @@ if PATH="$BOOT_BIN:/usr/bin:/bin" HOME="$BOOT_HOME" BOOTSTRAP_BIN="$BOOT_BIN" \
   exit 1
 fi
 [[ -x "$BOOT_BIN/demo" ]]
+
+# Dry-run describes toolchain dependencies that an earlier planned module will
+# provide; it must not fail merely because those commands do not exist yet.
+DRY_ROOT="$TEST_ROOT/dry-toolchains"
+DRY_HOME="$DRY_ROOT/home"
+DRY_BIN="$DRY_ROOT/bin"
+mkdir -p "$DRY_HOME" "$DRY_BIN"
+printf '#!/usr/bin/env bash\necho Linux\n' > "$DRY_BIN/uname"
+chmod +x "$DRY_BIN/uname"
+printf '%s\n' \
+  'all | planned-cargo | planned-cargo | rustup | stable' \
+  'all | planned-node | planned-node | fnm | lts' \
+  'all | planned-rust-cli | planned-rust-cli | cargo | planned-rust-cli' \
+  'all | planned-go-cli | planned-go-cli | go | example.com/planned@latest' \
+  'all | planned-node-cli | planned-node-cli | npm | planned-node-cli' \
+  > "$DRY_ROOT/normalized.manifest"
+PATH="$DRY_BIN:/usr/bin:/bin" HOME="$DRY_HOME" \
+  "$ROOT/scripts/install-deps.sh" --dry-run "$DRY_ROOT/normalized.manifest" > "$DRY_ROOT/output"
+grep -Fq '+ rustup default stable' "$DRY_ROOT/output"
+grep -Fq '+ fnm install --lts' "$DRY_ROOT/output"
+grep -Fq '+ cargo install planned-rust-cli' "$DRY_ROOT/output"
+grep -Fq '+ go install example.com/planned@latest' "$DRY_ROOT/output"
+grep -Fq '+ npm install --global planned-node-cli' "$DRY_ROOT/output"

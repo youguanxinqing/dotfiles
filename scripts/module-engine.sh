@@ -12,7 +12,16 @@ MODULE_ORDERS=()
 SELECTED_MODULE_NAMES=()
 SELECTED_MODULE_DIRS=()
 PLATFORM=""
-STATE_FILE="${DOTFILES_STATE_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/links.tsv}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
+if [[ -n "${DOTFILES_STATE_FILE:-}" ]]; then
+  STATE_DIR="$(dirname "$DOTFILES_STATE_FILE")"
+fi
+STATE_FILE="${DOTFILES_STATE_FILE:-$STATE_DIR/links.tsv}"
+MANAGED_STATE_FILE="${DOTFILES_MANAGED_STATE_FILE:-$STATE_DIR/managed.tsv}"
+BACKUP_DIR="${DOTFILES_BACKUP_DIR:-$STATE_DIR/backups}"
+REPO_POINTER="$HOME/.local/share/dotfiles/current"
+REPO_POINTER_SPEC="~/.local/share/dotfiles/current"
+REPO_POINTER_PLANNED=0
 
 PARSED_MODULE_PLATFORMS=""
 PARSED_MODULE_ENABLED=""
@@ -29,6 +38,7 @@ PARSED_LINK_PLATFORMS=()
 PARSED_LINK_MODES=()
 PARSED_LINK_SOURCES=()
 PARSED_LINK_TARGETS=()
+PARSED_LINK_TEMPLATES=()
 PARSED_LINK_SEEN=()
 
 trim_value() {
@@ -87,7 +97,7 @@ section_id_exists() {
 
 parse_module_ini() {
   local conf="$1" line line_number=0 header section="" section_index=-1
-  local key value seen id module_seen=0 MODULE_SEEN_KEYS=""
+  local key value seen id target_rel module_seen=0 MODULE_SEEN_KEYS=""
 
   PARSED_MODULE_PLATFORMS=all
   PARSED_MODULE_ENABLED=true
@@ -104,6 +114,7 @@ parse_module_ini() {
   PARSED_LINK_MODES=()
   PARSED_LINK_SOURCES=()
   PARSED_LINK_TARGETS=()
+  PARSED_LINK_TEMPLATES=()
   PARSED_LINK_SEEN=()
 
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -145,6 +156,7 @@ parse_module_ini() {
           PARSED_LINK_MODES+=("")
           PARSED_LINK_SOURCES+=("")
           PARSED_LINK_TARGETS+=("")
+          PARSED_LINK_TEMPLATES+=("")
           PARSED_LINK_SEEN+=("")
           section=link
           section_index=$((${#PARSED_LINK_IDS[@]} - 1))
@@ -210,6 +222,7 @@ parse_module_ini() {
           mode) PARSED_LINK_MODES[$section_index]="$value" ;;
           source) PARSED_LINK_SOURCES[$section_index]="$value" ;;
           target) PARSED_LINK_TARGETS[$section_index]="$value" ;;
+          template) PARSED_LINK_TEMPLATES[$section_index]="$value" ;;
           *) ini_error "$conf" "$line_number" "unknown link key: $key" ;;
         esac
         ;;
@@ -243,7 +256,7 @@ parse_module_ini() {
 
   for section_index in "${!PARSED_LINK_IDS[@]}"; do
     case "${PARSED_LINK_MODES[$section_index]}" in
-      tree|overlay) ;;
+      tree|overlay|entry|copy) ;;
       "") echo "$conf: link ${PARSED_LINK_IDS[$section_index]} is missing mode" >&2; exit 1 ;;
       *) echo "$conf: link ${PARSED_LINK_IDS[$section_index]} has invalid mode: ${PARSED_LINK_MODES[$section_index]}" >&2; exit 1 ;;
     esac
@@ -253,6 +266,24 @@ parse_module_ini() {
       exit 1
     }
     [[ "${PARSED_LINK_TARGETS[$section_index]}" == "~/"* ]] || { echo "$conf: link ${PARSED_LINK_IDS[$section_index]} target must start with ~/" >&2; exit 1; }
+    target_rel="${PARSED_LINK_TARGETS[$section_index]#\~/}"
+    [[ "$target_rel" != .. && "$target_rel" != ../* && "$target_rel" != */.. && "$target_rel" != */../* ]] || {
+      echo "$conf: link ${PARSED_LINK_IDS[$section_index]} target must stay inside the home directory" >&2
+      exit 1
+    }
+    if [[ "${PARSED_LINK_MODES[$section_index]}" == entry ]]; then
+      [[ -n "${PARSED_LINK_TEMPLATES[$section_index]}" ]] || {
+        echo "$conf: link ${PARSED_LINK_IDS[$section_index]} is missing template" >&2
+        exit 1
+      }
+      [[ "${PARSED_LINK_TEMPLATES[$section_index]}" == *'{source}'* ]] || {
+        echo "$conf: link ${PARSED_LINK_IDS[$section_index]} template must contain {source}" >&2
+        exit 1
+      }
+    elif [[ -n "${PARSED_LINK_TEMPLATES[$section_index]}" ]]; then
+      echo "$conf: link ${PARSED_LINK_IDS[$section_index]} template requires mode = entry" >&2
+      exit 1
+    fi
   done
 }
 
@@ -404,10 +435,10 @@ write_dependency_manifest() {
   done
 }
 
-install_selected_dependencies() {
+install_dependencies_for_modules() {
   local manifest args=() status
   manifest="$(mktemp)"
-  write_dependency_manifest "$manifest" "${SELECTED_MODULE_DIRS[@]}"
+  write_dependency_manifest "$manifest" "$@"
   if [[ ! -s "$manifest" ]]; then
     rm -f "$manifest"
     return 0
@@ -420,6 +451,14 @@ install_selected_dependencies() {
   fi
   rm -f "$manifest"
   return "$status"
+}
+
+install_module_dependencies() {
+  install_dependencies_for_modules "$1"
+}
+
+install_selected_dependencies() {
+  install_dependencies_for_modules "${SELECTED_MODULE_DIRS[@]}"
 }
 
 resolve_target() {
@@ -445,6 +484,247 @@ record_link() {
   fi
   printf '%s\t%s\t%s\n' "$module" "$source" "$target" >> "$temp"
   mv "$temp" "$STATE_FILE"
+}
+
+forget_link_target() {
+  local target="$1" temp
+  ((DRY_RUN)) && return
+  [[ -f "$STATE_FILE" ]] || return 0
+  temp="$STATE_FILE.tmp.$$"
+  awk -F '\t' -v target="$target" '$3 != target' "$STATE_FILE" > "$temp"
+  mv "$temp" "$STATE_FILE"
+}
+
+link_target_is_recorded() {
+  local wanted_module="$1" wanted_source="$2" wanted_target="$3"
+  local state_module source target
+  [[ -f "$STATE_FILE" ]] || return 1
+  while IFS=$'\t' read -r state_module source target; do
+    [[ "$state_module" == "$wanted_module" && "$source" == "$wanted_source" && "$target" == "$wanted_target" ]] && return 0
+  done < "$STATE_FILE"
+  return 1
+}
+
+ensure_repo_pointer() {
+  local current
+  if ((DRY_RUN && REPO_POINTER_PLANNED)); then
+    return
+  fi
+  if [[ -L "$REPO_POINTER" ]]; then
+    current="$(readlink "$REPO_POINTER")"
+    if [[ "$current" == "$ROOT" ]]; then
+      echo "Repository pointer is current: $REPO_POINTER"
+      record_link @core "$ROOT" "$REPO_POINTER"
+      return
+    fi
+    if ! link_target_is_recorded @core "$current" "$REPO_POINTER"; then
+      echo "Refusing to replace unmanaged repository pointer: $REPO_POINTER -> $current" >&2
+      return 1
+    fi
+    if ((DRY_RUN)); then
+      printf '+ ln -sfn %q %q\n' "$ROOT" "$REPO_POINTER"
+      REPO_POINTER_PLANNED=1
+    else
+      ln -sfn "$ROOT" "$REPO_POINTER"
+      echo "Updated repository pointer: $REPO_POINTER -> $ROOT"
+    fi
+    record_link @core "$ROOT" "$REPO_POINTER"
+    return
+  fi
+  if [[ -e "$REPO_POINTER" ]]; then
+    echo "Refusing to replace unmanaged repository pointer: $REPO_POINTER" >&2
+    return 1
+  fi
+
+  if ((DRY_RUN)); then
+    printf '+ mkdir -p %q\n' "$(dirname "$REPO_POINTER")"
+    printf '+ ln -s %q %q\n' "$ROOT" "$REPO_POINTER"
+    REPO_POINTER_PLANNED=1
+  else
+    mkdir -p "$(dirname "$REPO_POINTER")"
+    ln -s "$ROOT" "$REPO_POINTER"
+    echo "Created repository pointer: $REPO_POINTER -> $ROOT"
+  fi
+  record_link @core "$ROOT" "$REPO_POINTER"
+}
+
+file_fingerprint() {
+  # Git is the bootstrap prerequisite and provides the same strong content
+  # fingerprint on macOS and Linux without another hashing-tool dependency.
+  git hash-object "$1"
+}
+
+load_managed_record() {
+  local wanted_target="$1" state_module kind source target fingerprint
+  MANAGED_RECORD_MODULE=""
+  MANAGED_RECORD_KIND=""
+  MANAGED_RECORD_SOURCE=""
+  MANAGED_RECORD_FINGERPRINT=""
+  [[ -f "$MANAGED_STATE_FILE" ]] || return 1
+  while IFS=$'\t' read -r state_module kind source target fingerprint; do
+    [[ "$target" == "$wanted_target" ]] || continue
+    MANAGED_RECORD_MODULE="$state_module"
+    MANAGED_RECORD_KIND="$kind"
+    MANAGED_RECORD_SOURCE="$source"
+    MANAGED_RECORD_FINGERPRINT="$fingerprint"
+    return 0
+  done < "$MANAGED_STATE_FILE"
+  return 1
+}
+
+record_managed_file() {
+  local module="$1" kind="$2" source="$3" target="$4" fingerprint="$5" temp
+  ((DRY_RUN)) && return
+  mkdir -p "$(dirname "$MANAGED_STATE_FILE")"
+  temp="$MANAGED_STATE_FILE.tmp.$$"
+  if [[ -f "$MANAGED_STATE_FILE" ]]; then
+    awk -F '\t' -v target="$target" '$4 != target' "$MANAGED_STATE_FILE" > "$temp"
+  else
+    : > "$temp"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$module" "$kind" "$source" "$target" "$fingerprint" >> "$temp"
+  mv "$temp" "$MANAGED_STATE_FILE"
+}
+
+backup_managed_target() {
+  local module="$1" target="$2" relative safe module_backup backup
+  if ((DRY_RUN)); then
+    printf '+ backup %q under %q\n' "$target" "$BACKUP_DIR/$module"
+    return
+  fi
+
+  relative="${target#"$HOME"/}"
+  safe="${relative//\//__}"
+  module_backup="$BACKUP_DIR/$module"
+  mkdir -p "$module_backup"
+  backup="$(mktemp "$module_backup/$safe.$(date +%Y%m%d-%H%M%S).XXXXXX")"
+  if [[ -L "$target" ]]; then
+    rm "$backup"
+    cp -P "$target" "$backup"
+  else
+    cp -p "$target" "$backup"
+  fi
+  echo "Backed up managed target: $target -> $backup"
+}
+
+prepare_managed_parent() {
+  local target="$1" parent resolved
+  MANAGED_PARENT_REPLACED=0
+  parent="$(dirname "$target")"
+  if [[ -L "$parent" ]]; then
+    resolved="$(CDPATH= cd -- "$parent" 2>/dev/null && pwd -P || true)"
+    if [[ "$resolved" == "$ROOT" || "$resolved" == "$ROOT/"* ]]; then
+      if ((DRY_RUN)); then
+        printf '+ rm %q\n' "$parent"
+        printf '+ mkdir -p %q\n' "$parent"
+      else
+        rm "$parent"
+        mkdir -p "$parent"
+        echo "Replaced legacy repository directory link: $parent"
+      fi
+      forget_link_target "$parent"
+      MANAGED_PARENT_REPLACED=1
+      return
+    fi
+  fi
+  if ((DRY_RUN)); then
+    [[ -d "$parent" ]] || printf '+ mkdir -p %q\n' "$parent"
+  else
+    mkdir -p "$parent"
+  fi
+}
+
+install_managed_file() {
+  local module="$1" kind="$2" source="$3" target="$4" desired="$5"
+  local desired_fingerprint current_fingerprint current_link temp has_record=0
+
+  desired_fingerprint="$(file_fingerprint "$desired")"
+  load_managed_record "$target" && has_record=1
+  if ((has_record)) && [[ "$MANAGED_RECORD_MODULE" != "$module" ]]; then
+    echo "Managed target belongs to $MANAGED_RECORD_MODULE, not $module: $target" >&2
+    return 1
+  fi
+
+  prepare_managed_parent "$target"
+
+  if ((MANAGED_PARENT_REPLACED)); then
+    :
+  elif [[ -L "$target" ]]; then
+    current_link="$(readlink "$target")"
+    if [[ "$current_link" != "$source" && "$current_link" != "$ROOT/"* ]]; then
+      if ((has_record)) && [[ "$desired_fingerprint" != "$MANAGED_RECORD_FINGERPRINT" ]]; then
+        echo "Managed-file conflict (repository and runtime both changed): $target" >&2
+        return 1
+      fi
+      backup_managed_target "$module" "$target"
+    fi
+    if ((DRY_RUN)); then
+      printf '+ rm %q\n' "$target"
+    else
+      rm "$target"
+      echo "Removed legacy configuration link: $target"
+    fi
+    forget_link_target "$target"
+  elif [[ -e "$target" ]]; then
+    [[ -f "$target" ]] || {
+      echo "Refusing to replace non-file managed target: $target" >&2
+      return 1
+    }
+    if cmp -s "$desired" "$target"; then
+      echo "Managed file is current: $target"
+      record_managed_file "$module" "$kind" "$source" "$target" "$desired_fingerprint"
+      return
+    fi
+
+    current_fingerprint="$(file_fingerprint "$target")"
+    if ((has_record)) && [[ "$current_fingerprint" != "$MANAGED_RECORD_FINGERPRINT" && "$desired_fingerprint" != "$MANAGED_RECORD_FINGERPRINT" ]]; then
+      echo "Managed-file conflict (repository and runtime both changed): $target" >&2
+      return 1
+    fi
+    if ((has_record)) && [[ "$current_fingerprint" != "$MANAGED_RECORD_FINGERPRINT" ]]; then
+      echo "Runtime drift detected; restoring repository version: $target"
+      backup_managed_target "$module" "$target"
+    elif ((!has_record)); then
+      backup_managed_target "$module" "$target"
+    fi
+  fi
+
+  if ((DRY_RUN)); then
+    printf '+ install managed %q -> %q\n' "$source" "$target"
+  else
+    temp="$(mktemp "$target.dotfiles-new.XXXXXX")"
+    cp -p "$desired" "$temp"
+    mv "$temp" "$target"
+    echo "Installed managed $kind: $target"
+  fi
+  record_managed_file "$module" "$kind" "$source" "$target" "$desired_fingerprint"
+}
+
+managed_copy() {
+  local module="$1" source_rel="$2" target_spec="$3" source target
+  source_rel="${source_rel#./}"
+  source="$ROOT/$source_rel"
+  target="$(resolve_target "$target_spec")"
+  [[ -f "$source" && ! -L "$source" ]] || { echo "Managed-copy source must be a regular file: $source_rel" >&2; exit 1; }
+  install_managed_file "$module" copy "$source" "$target" "$source"
+}
+
+managed_entry() {
+  local module="$1" source_rel="$2" target_spec="$3" template="$4"
+  local source source_spec target desired content status=0
+  source_rel="${source_rel#./}"
+  source="$ROOT/$source_rel"
+  target="$(resolve_target "$target_spec")"
+  [[ -f "$source" && ! -L "$source" ]] || { echo "Managed-entry source must be a regular file: $source_rel" >&2; exit 1; }
+
+  ensure_repo_pointer
+  source_spec="$REPO_POINTER_SPEC/$source_rel"
+  content="${template//\{source\}/$source_spec}"
+  desired="$(mktemp "${TMPDIR:-/tmp}/dotfiles-entry.XXXXXX")"
+  printf '%s\n' "$content" > "$desired"
+  install_managed_file "$module" entry "$source" "$target" "$desired" || status=$?
+  rm -f "$desired"
+  return "$status"
 }
 
 link_one() {
@@ -513,6 +793,8 @@ link_parsed_module() {
     case "${PARSED_LINK_MODES[$index]}" in
       tree) link_tree "$module" "${PARSED_LINK_SOURCES[$index]}" "${PARSED_LINK_TARGETS[$index]}" ;;
       overlay) link_overlay "$module" "${PARSED_LINK_SOURCES[$index]}" "${PARSED_LINK_TARGETS[$index]}" ;;
+      entry) managed_entry "$module" "${PARSED_LINK_SOURCES[$index]}" "${PARSED_LINK_TARGETS[$index]}" "${PARSED_LINK_TEMPLATES[$index]}" ;;
+      copy) managed_copy "$module" "${PARSED_LINK_SOURCES[$index]}" "${PARSED_LINK_TARGETS[$index]}" ;;
     esac
   done
 }
@@ -535,6 +817,12 @@ link_selected_modules() {
   return 0
 }
 
+link_one_module() {
+  local module="$1" module_dir="$2"
+  link_module_home "$module" "$module_dir"
+  link_parsed_module "$module" "$module_dir"
+}
+
 run_selected_hooks() {
   local hook_name="$1" index hook
   for index in "${!SELECTED_MODULE_DIRS[@]}"; do
@@ -547,6 +835,17 @@ run_selected_hooks() {
     fi
   done
   return 0
+}
+
+run_one_hook() {
+  local module_dir="$1" hook_name="$2" hook
+  hook="$module_dir/$hook_name"
+  [[ -f "$hook" ]] || return 0
+  if ((DRY_RUN)); then
+    printf '+ bash %q\n' "$hook"
+  else
+    bash "$hook"
+  fi
 }
 
 clean_recorded_links() {
@@ -578,11 +877,49 @@ clean_recorded_links() {
   fi
 }
 
+clean_recorded_managed_files() {
+  local module="$1" temp state_module kind source target fingerprint current_fingerprint
+  [[ -f "$MANAGED_STATE_FILE" ]] || return 0
+  temp="$MANAGED_STATE_FILE.tmp.$$"
+  : > "$temp"
+  while IFS=$'\t' read -r state_module kind source target fingerprint; do
+    if [[ "$state_module" != "$module" ]]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' "$state_module" "$kind" "$source" "$target" "$fingerprint" >> "$temp"
+      continue
+    fi
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+      echo "Already clean: $target"
+      continue
+    fi
+    if [[ -f "$target" && ! -L "$target" ]]; then
+      current_fingerprint="$(file_fingerprint "$target")"
+      if [[ "$current_fingerprint" == "$fingerprint" ]]; then
+        if ((DRY_RUN)); then
+          printf '+ rm %q\n' "$target"
+          printf '%s\t%s\t%s\t%s\t%s\n' "$state_module" "$kind" "$source" "$target" "$fingerprint" >> "$temp"
+        else
+          rm "$target"
+          echo "Removed managed $kind: $target"
+        fi
+        continue
+      fi
+    fi
+    echo "Skipped managed file changed outside dotfiles: $target"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$state_module" "$kind" "$source" "$target" "$fingerprint" >> "$temp"
+  done < "$MANAGED_STATE_FILE"
+  if ((DRY_RUN)); then
+    rm -f "$temp"
+  else
+    mv "$temp" "$MANAGED_STATE_FILE"
+  fi
+}
+
 clean_selected_module() {
   local name="$1" index module_dir target_manifest keep_manifest args=(--clean) status
   local keep_dirs=()
   index="$(module_index "$name")"
   module_dir="${MODULE_DIRS[$index]}"
+  clean_recorded_managed_files "$name"
   clean_recorded_links "$name"
 
   target_manifest="$(mktemp)"
