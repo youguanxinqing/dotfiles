@@ -44,6 +44,35 @@ bindings="$(PATH="$TEST_BIN:/usr/bin:/bin" FZF_BINDINGS="$FZF_BINDINGS" \
 assert_contains "$bindings" 'fzf-history-widget'
 assert_contains "$bindings" 'fzf-file-widget'
 
+# config.fish runs after every conf.d snippet. Reproduce an Omarchy-style
+# vendor package that installs its own prompt and fzf bindings, then verify the
+# repository restores its UI before machine-local overrides are loaded.
+INTERACTIVE_HOME="$TEST_ROOT/interactive-home"
+INTERACTIVE_CONFIG_ROOT="$TEST_ROOT/interactive-config"
+INTERACTIVE_VENDOR_ROOT="$TEST_ROOT/interactive-vendor"
+mkdir -p "$INTERACTIVE_HOME" "$INTERACTIVE_CONFIG_ROOT" \
+  "$INTERACTIVE_VENDOR_ROOT/fish/vendor_conf.d"
+ln -s "$ROOT/configs/fish" "$INTERACTIVE_CONFIG_ROOT/fish"
+printf '%s\n' \
+  'function fish_prompt; echo vendor-prompt; end' \
+  'function fish_right_prompt; echo vendor-right-prompt; end' \
+  'bind \\cr vendor-history' \
+  'bind --erase \\ct 2>/dev/null' \
+  > "$INTERACTIVE_VENDOR_ROOT/fish/vendor_conf.d/omarchy-init.fish"
+
+interactive="$(HOME="$INTERACTIVE_HOME" XDG_CONFIG_HOME="$INTERACTIVE_CONFIG_ROOT" \
+  XDG_DATA_DIRS="$INTERACTIVE_VENDOR_ROOT" PATH="$TEST_BIN:/usr/bin:/bin" TERM=dumb \
+  "$FISH_BIN" --interactive --command \
+  'fish_prompt; fish_right_prompt; bind \\cr; bind \\ct')"
+assert_contains "$interactive" '@'
+assert_contains "$interactive" '<<<'
+assert_contains "$interactive" 'fzf-history-widget'
+assert_contains "$interactive" 'fzf-file-widget'
+if [[ "$interactive" == *vendor-prompt* || "$interactive" == *vendor-history* ]]; then
+  echo "Vendor Fish UI was not overridden by the repository config" >&2
+  exit 1
+fi
+
 # Non-interactive Fish shells must not create an fnm multishell PATH.
 printf '%s\n' '#!/usr/bin/env bash' 'printf called > "$FNM_TEST_LOG"' > "$TEST_BIN/fnm"
 chmod +x "$TEST_BIN/fnm"
