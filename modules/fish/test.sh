@@ -6,6 +6,21 @@ set -euo pipefail
 source "${DOTFILES_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)}/scripts/tests/testlib.sh"
 new_test_root
 
+# Optional Flutter entry points are published into the shared user bin without
+# adding the whole SDK directory to PATH, and are tracked as Fish-owned links.
+FLUTTER_HOME="$TEST_ROOT/flutter-home"
+FLUTTER_STATE="$TEST_ROOT/flutter-state/links.tsv"
+mkdir -p "$FLUTTER_HOME/tools/flutter/bin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$FLUTTER_HOME/tools/flutter/bin/flutter"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$FLUTTER_HOME/tools/flutter/bin/dart"
+chmod +x "$FLUTTER_HOME/tools/flutter/bin/flutter" "$FLUTTER_HOME/tools/flutter/bin/dart"
+HOME="$FLUTTER_HOME" DOTFILES_STATE_FILE="$FLUTTER_STATE" \
+  "$ROOT/modules/fish/post-links.sh" >/dev/null
+assert_link "$FLUTTER_HOME/.local/bin/flutter" "$FLUTTER_HOME/tools/flutter/bin/flutter"
+assert_link "$FLUTTER_HOME/.local/bin/dart" "$FLUTTER_HOME/tools/flutter/bin/dart"
+grep -Fq $'fish\t'"$FLUTTER_HOME/tools/flutter/bin/flutter"$'\t'"$FLUTTER_HOME/.local/bin/flutter" \
+  "$FLUTTER_STATE"
+
 # Generic Linux uses its system package manager and keeps the optional chsh
 # behavior.
 GENERIC_ROOT="$TEST_ROOT/generic"

@@ -28,9 +28,9 @@ from collections import deque
 os.environ["PATH"] = os.pathsep.join(
     (
         os.path.expanduser("~/.local/bin"),
-        os.path.expanduser("~/.fzf/bin"),
         "/opt/homebrew/bin",
         "/usr/local/bin",
+        "/home/linuxbrew/.linuxbrew/bin",
         os.environ.get("PATH", ""),
     )
 )

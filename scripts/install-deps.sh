@@ -10,7 +10,12 @@ DRY_RUN=0
 CLI_MANIFESTS=()
 FAILED_CLIS=()
 HOMEBREW_INSTALL_COMMIT=cced90146ea6d3057c03a636b668fef177415eb3
-export PATH="$HOME/.cargo/bin:$HOME/.goup/current/bin:$HOME/go/bin:$PATH"
+# New user-installed CLIs are published into one stable bin directory. Legacy
+# locations stay on this bootstrap-only PATH so an existing machine can still
+# run the installer that migrates it.
+export CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT:-$HOME/.local}"
+export GOBIN="${GOBIN:-$HOME/.local/bin}"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.goup/current/bin:$HOME/go/bin:$PATH"
 
 [[ "${1:-}" == --clean ]] && { ACTION=clean; shift; }
 while (($#)); do
@@ -141,7 +146,7 @@ needs_brew() {
       ((line_number += 1))
       if parse_cli_line "$manifest" "$line_number" "$line" && platform_matches \
         && [[ "$CLI_INSTALLER" == brew || "$CLI_INSTALLER" == brew-cask ]] \
-        && ! command -v "$CLI_COMMAND" >/dev/null 2>&1; then
+        && ! cli_is_installed; then
         return 0
       fi
     done < "$manifest"
@@ -180,7 +185,8 @@ cli_is_installed() {
   local command="${1:-$CLI_COMMAND}" installer="${2:-$CLI_INSTALLER}" source="${3:-$CLI_SOURCE}"
   case "$installer" in
     script) bash "$ROOT/$source" check >/dev/null 2>&1 ;;
-    brew-cask) command -v "$command" >/dev/null 2>&1 || { [[ -n "${BREW:-}" ]] && "$BREW" list --cask "$source" >/dev/null 2>&1; } ;;
+    brew) [[ -n "${BREW:-}" ]] && "$BREW" list --formula "$source" >/dev/null 2>&1 && command -v "$command" >/dev/null 2>&1 ;;
+    brew-cask) [[ -n "${BREW:-}" ]] && "$BREW" list --cask "$source" >/dev/null 2>&1 && command -v "$command" >/dev/null 2>&1 ;;
     rustup) command -v "$command" >/dev/null 2>&1 && rustup show active-toolchain >/dev/null 2>&1 ;;
     *) command -v "$command" >/dev/null 2>&1 ;;
   esac
@@ -350,13 +356,11 @@ fi
   echo "At least one dependency manifest is required." >&2
   exit 2
 }
+BREW="$(find_brew || true)"
 if needs_brew "${CLI_MANIFESTS[@]}"; then
-  BREW="$(find_brew || true)"
   if [[ -z "$BREW" ]] && ! install_homebrew; then
     echo "Homebrew installation failed; continuing to check all CLIs." >&2
   fi
-else
-  BREW="$(find_brew || true)"
 fi
 refresh_environment
 

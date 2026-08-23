@@ -41,6 +41,39 @@ if grep -Fq shared "$BREW_ROOT/brew.log"; then
   exit 1
 fi
 
+# A command from the wrong source does not satisfy a Homebrew declaration.
+SOURCE_ROOT="$TEST_ROOT/brew-source"
+SOURCE_HOME="$SOURCE_ROOT/home"
+SOURCE_BREW_BIN="$SOURCE_ROOT/brew-bin"
+SOURCE_WRONG_BIN="$SOURCE_ROOT/wrong-bin"
+SOURCE_MARKER="$SOURCE_ROOT/installed"
+SOURCE_LOG="$SOURCE_ROOT/brew.log"
+mkdir -p "$SOURCE_HOME" "$SOURCE_BREW_BIN" "$SOURCE_WRONG_BIN"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$SOURCE_WRONG_BIN/demo"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -eu' \
+  'case "${1:-} ${2:-}" in' \
+  '  "list --formula") [[ "${3:-}" == demo && -f "$BREW_SOURCE_MARKER" ]] ;;' \
+  '  "shellenv bash") printf '\''export PATH="%s:$PATH"\n'\'' "$BREW_SOURCE_BIN" ;;' \
+  '  "install demo")' \
+  '    : > "$BREW_SOURCE_MARKER"' \
+  '    printf '\''#!/usr/bin/env bash\nexit 0\n'\'' > "$BREW_SOURCE_BIN/demo"' \
+  '    chmod +x "$BREW_SOURCE_BIN/demo"' \
+  '    printf '\''%s\n'\'' "$*" >> "$BREW_SOURCE_LOG"' \
+  '    ;;' \
+  '  *) exit 1 ;;' \
+  'esac' > "$SOURCE_BREW_BIN/brew"
+printf '#!/usr/bin/env bash\necho Linux\n' > "$SOURCE_BREW_BIN/uname"
+chmod +x "$SOURCE_WRONG_BIN/demo" "$SOURCE_BREW_BIN/brew" "$SOURCE_BREW_BIN/uname"
+printf 'all | demo | demo | brew | demo\n' > "$SOURCE_ROOT/normalized.manifest"
+: > "$SOURCE_LOG"
+PATH="$SOURCE_WRONG_BIN:$SOURCE_BREW_BIN:/usr/bin:/bin" HOME="$SOURCE_HOME" \
+  BREW_SOURCE_BIN="$SOURCE_BREW_BIN" BREW_SOURCE_MARKER="$SOURCE_MARKER" \
+  BREW_SOURCE_LOG="$SOURCE_LOG" \
+  "$ROOT/scripts/install-deps.sh" "$SOURCE_ROOT/normalized.manifest"
+grep -Fqx 'install demo' "$SOURCE_LOG"
+
 # A module-local script can implement an arbitrary lifecycle without a central adapter edit.
 SCRIPT_ROOT="$TEST_ROOT/script-repo"
 SCRIPT_HOME="$TEST_ROOT/script-home"

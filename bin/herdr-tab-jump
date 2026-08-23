@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Herdr may have been started outside fish (for example by a GUI terminal), so
 # popup helpers must not depend on fish having initialized PATH first.
-export PATH="$HOME/.local/bin:$HOME/.fzf/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"
 
 out=$({ herdr workspace list; herdr tab list; })
 

@@ -41,9 +41,12 @@ Fish installation that this repository did not install.
 
 ## Installed ≠ right version ≠ right source
 
-`cli_is_installed` in `install-deps.sh` runs a bare `command -v`, so
-`CLI check passed` does not mean the machine matches what is declared. Two real
-divergences:
+For Homebrew formulae and casks, `cli_is_installed` requires both the declared
+package and its command. A same-named command from another package manager no
+longer satisfies the declaration. Other installer adapters still rely on a
+bare `command -v`, so `CLI check passed` does not universally mean the machine
+matches what is declared. Two historical divergences motivated the stricter
+Homebrew check:
 
 - **Stale version.** herdr sat at 0.8.0 while the manifest only asked for
   "herdr". Its theme rendering differed from another machine, and the cause took
@@ -52,10 +55,10 @@ divergences:
   all come from `/opt/nanobrew/prefix/bin`, while their modules declare brew.
   `command -v` finds them, so the brew copies never get installed.
 
-`cli_is_managed` is the predicate that checks the real source
-(`brew list --formula`, `cargo install --list`, and so on), but it is only
-called on the clean path. Wiring it into `verify_manifest` would surface these;
-pinning versions would need a `min_version` key in dependency sections.
+`cli_is_managed` remains the cleanup predicate for Cargo, npm, scripts, and
+other adapters. Extending source verification beyond Homebrew would require
+installer-specific checks; pinning versions would need a `min_version` key in
+dependency sections.
 
 ## One trap when scripting against herdr
 
