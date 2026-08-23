@@ -83,6 +83,7 @@ modules/jq/module.ini
 ```ini
 [module]
 platforms = all
+enabled = true
 default = true
 order = 10
 
@@ -92,9 +93,18 @@ installer = brew
 source = jq
 ```
 
-The `[module]` values default to `platforms = all`, `default = true`, and
-`order = 50`. A dependency section's name is its stable dependency id;
-`platform` is optional and defaults to `all`.
+The `[module]` values default to `platforms = all`, `enabled = true`,
+`default = true`, and `order = 50`. A dependency section's name is its stable
+dependency id; `platform` is optional and defaults to `all`.
+
+Set `enabled = false` to park a module temporarily. Normal installs and direct
+module selection will skip/refuse it, while its installed software, existing
+links, and ownership records remain untouched. No cleanup is triggered by the
+switch. If cleanup is eventually wanted, `./install.sh clean <module>` remains
+available while the module is disabled; run it before deleting the module from
+the repository. `default = false` has a different purpose: the module stays
+enabled and can be selected explicitly, but is omitted from an install with no
+module arguments.
 
 Built-in installers are `brew`, `brew-cask`, `cargo`, `fnm`, `go`, `npm`, and
 `rustup`:

@@ -71,7 +71,8 @@ assert_link "$LEGACY_HOME/.config/fish" "$ROOT/configs/fish"
 SYNTH_ROOT="$TEST_ROOT/repo"
 SYNTH_HOME="$TEST_ROOT/synth-home"
 SYNTH_STATE="$TEST_ROOT/synth-state/links.tsv"
-mkdir -p "$SYNTH_ROOT/scripts" "$SYNTH_ROOT/modules/demo/home/.config/demo" "$SYNTH_HOME"
+mkdir -p "$SYNTH_ROOT/scripts" "$SYNTH_ROOT/modules/demo/home/.config/demo" \
+  "$SYNTH_ROOT/modules/parked/home/.config/parked" "$SYNTH_HOME"
 cp "$ROOT/install.sh" "$SYNTH_ROOT/install.sh"
 cp "$ROOT/scripts/module-engine.sh" "$SYNTH_ROOT/scripts/module-engine.sh"
 printf '%s\n' \
@@ -90,6 +91,11 @@ printf '%s\n' \
 printf '#!/usr/bin/env bash\nexit 0\n' > "$SYNTH_ROOT/modules/demo/install.sh"
 printf '#!/usr/bin/env bash\nprintf '\''hook\\n'\'' > "$HOOK_LOG"\n' > "$SYNTH_ROOT/modules/demo/post-install.sh"
 printf 'first\n' > "$SYNTH_ROOT/modules/demo/home/.config/demo/first.conf"
+printf '%s\n' \
+  '[module]' \
+  'platforms = all' \
+  'enabled = true' > "$SYNTH_ROOT/modules/parked/module.ini"
+printf 'kept\n' > "$SYNTH_ROOT/modules/parked/home/.config/parked/kept.conf"
 printf '*.runtime\n' > "$SYNTH_ROOT/.gitignore"
 printf 'private\n' > "$SYNTH_ROOT/modules/demo/home/.config/demo/cache.runtime"
 chmod +x "$SYNTH_ROOT/install.sh" "$SYNTH_ROOT/scripts/install-deps.sh"
@@ -97,6 +103,32 @@ git -C "$SYNTH_ROOT" init -q
 
 list_output="$(PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" "$SYNTH_ROOT/install.sh" list)"
 assert_contains "$list_output" "demo"
+
+# Disabling a module prevents all future application without cleaning its
+# existing links or ownership state.
+PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" DOTFILES_STATE_FILE="$SYNTH_STATE" \
+  "$SYNTH_ROOT/install.sh" --links-only parked >/dev/null
+assert_link "$SYNTH_HOME/.config/parked/kept.conf" "$SYNTH_ROOT/modules/parked/home/.config/parked/kept.conf"
+printf '%s\n' \
+  '[module]' \
+  'platforms = all' \
+  'enabled = false' > "$SYNTH_ROOT/modules/parked/module.ini"
+printf 'not applied\n' > "$SYNTH_ROOT/modules/parked/home/.config/parked/later.conf"
+PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" DOTFILES_STATE_FILE="$SYNTH_STATE" \
+  "$SYNTH_ROOT/install.sh" --links-only >/dev/null
+assert_link "$SYNTH_HOME/.config/parked/kept.conf" "$SYNTH_ROOT/modules/parked/home/.config/parked/kept.conf"
+[[ ! -e "$SYNTH_HOME/.config/parked/later.conf" ]]
+list_output="$(PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" "$SYNTH_ROOT/install.sh" list)"
+printf '%s\n' "$list_output" | grep -Eq '^parked[[:space:]]+all[[:space:]]+false[[:space:]]+true[[:space:]]+disabled$'
+if PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" "$SYNTH_ROOT/install.sh" --links-only parked >"$TEST_ROOT/disabled.out" 2>&1; then
+  echo "Installer explicitly applied a disabled module." >&2
+  exit 1
+fi
+grep -Fq 'Module parked is disabled in module.ini.' "$TEST_ROOT/disabled.out"
+PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" DOTFILES_STATE_FILE="$SYNTH_STATE" \
+  "$SYNTH_ROOT/install.sh" clean parked >/dev/null
+[[ ! -e "$SYNTH_HOME/.config/parked/kept.conf" && ! -L "$SYNTH_HOME/.config/parked/kept.conf" ]]
+
 PATH="$LINUX_BIN:$PATH" HOME="$SYNTH_HOME" DEPS_LOG="$TEST_ROOT/deps.log" HOOK_LOG="$TEST_ROOT/hook.log" \
   "$SYNTH_ROOT/install.sh" --deps-only demo >/dev/null
 grep -Fqx 'all | demo | demo | script | modules/demo/install.sh' "$TEST_ROOT/deps.log"

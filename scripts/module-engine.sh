@@ -6,6 +6,7 @@
 MODULE_NAMES=()
 MODULE_DIRS=()
 MODULE_PLATFORMS=()
+MODULE_ENABLEDS=()
 MODULE_DEFAULTS=()
 MODULE_ORDERS=()
 SELECTED_MODULE_NAMES=()
@@ -14,6 +15,7 @@ PLATFORM=""
 STATE_FILE="${DOTFILES_STATE_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/links.tsv}"
 
 PARSED_MODULE_PLATFORMS=""
+PARSED_MODULE_ENABLED=""
 PARSED_MODULE_DEFAULT=""
 PARSED_MODULE_ORDER=""
 PARSED_DEP_IDS=()
@@ -88,6 +90,7 @@ parse_module_ini() {
   local key value seen id module_seen=0 MODULE_SEEN_KEYS=""
 
   PARSED_MODULE_PLATFORMS=all
+  PARSED_MODULE_ENABLED=true
   PARSED_MODULE_DEFAULT=true
   PARSED_MODULE_ORDER=50
   PARSED_DEP_IDS=()
@@ -165,6 +168,10 @@ parse_module_ini() {
         MODULE_SEEN_KEYS="${seen:+$seen|}$key"
         case "$key" in
           platforms) PARSED_MODULE_PLATFORMS="$value" ;;
+          enabled)
+            [[ "$value" == true || "$value" == false ]] || ini_error "$conf" "$line_number" "enabled must be true or false"
+            PARSED_MODULE_ENABLED="$value"
+            ;;
           default)
             [[ "$value" == true || "$value" == false ]] || ini_error "$conf" "$line_number" "default must be true or false"
             PARSED_MODULE_DEFAULT="$value"
@@ -266,7 +273,9 @@ discover_modules() {
     }
     parse_module_ini "$conf"
     order=$((10#$PARSED_MODULE_ORDER))
-    printf '%08d|%s|%s|%s|%s\n' "$order" "$name" "$dir" "$PARSED_MODULE_PLATFORMS" "$PARSED_MODULE_DEFAULT" >> "$records"
+    printf '%08d|%s|%s|%s|%s|%s\n' \
+      "$order" "$name" "$dir" "$PARSED_MODULE_PLATFORMS" \
+      "$PARSED_MODULE_ENABLED" "$PARSED_MODULE_DEFAULT" >> "$records"
   done
 
   [[ -s "$records" ]] || {
@@ -276,13 +285,14 @@ discover_modules() {
   }
   sort -t '|' -k1,1n -k2,2 "$records" > "$sorted"
 
-  while IFS='|' read -r order name dir parsed_platforms parsed_default; do
+  while IFS='|' read -r order name dir parsed_platforms parsed_enabled parsed_default; do
     order="${order#"${order%%[!0]*}"}"
     [[ -n "$order" ]] || order=0
     MODULE_ORDERS+=("$order")
     MODULE_NAMES+=("$name")
     MODULE_DIRS+=("$dir")
     MODULE_PLATFORMS+=("$parsed_platforms")
+    MODULE_ENABLEDS+=("$parsed_enabled")
     MODULE_DEFAULTS+=("$parsed_default")
   done < "$sorted"
   rm -f "$records" "$sorted"
@@ -313,6 +323,10 @@ select_modules() {
   for wanted in "$@"; do
     index="$(module_index "$wanted" || true)"
     [[ -n "$index" ]] || { echo "Unknown module: $wanted" >&2; exit 2; }
+    [[ "${MODULE_ENABLEDS[$index]}" == true ]] || {
+      echo "Module $wanted is disabled in module.ini." >&2
+      exit 2
+    }
     platform_matches "${MODULE_PLATFORMS[$index]}" || {
       echo "Module $wanted is not available on $PLATFORM." >&2
       exit 2
@@ -321,6 +335,7 @@ select_modules() {
 
   for index in "${!MODULE_NAMES[@]}"; do
     name="${MODULE_NAMES[$index]}"
+    [[ "${MODULE_ENABLEDS[$index]}" == true ]] || continue
     platform_matches "${MODULE_PLATFORMS[$index]}" || continue
     if ((${#CONFIGS[@]} == 0)); then
       [[ "${MODULE_DEFAULTS[$index]}" == true ]] || continue
@@ -334,13 +349,17 @@ select_modules() {
 
 list_modules() {
   local index availability
-  printf '%-24s %-12s %-8s %s\n' MODULE PLATFORMS DEFAULT STATUS
+  printf '%-24s %-12s %-8s %-8s %s\n' MODULE PLATFORMS ENABLED DEFAULT STATUS
   for index in "${!MODULE_NAMES[@]}"; do
-    availability=unavailable
-    platform_matches "${MODULE_PLATFORMS[$index]}" && availability=available
-    printf '%-24s %-12s %-8s %s\n' \
+    if [[ "${MODULE_ENABLEDS[$index]}" != true ]]; then
+      availability=disabled
+    else
+      availability=unavailable
+      platform_matches "${MODULE_PLATFORMS[$index]}" && availability=available
+    fi
+    printf '%-24s %-12s %-8s %-8s %s\n' \
       "${MODULE_NAMES[$index]}" "${MODULE_PLATFORMS[$index]}" \
-      "${MODULE_DEFAULTS[$index]}" "$availability"
+      "${MODULE_ENABLEDS[$index]}" "${MODULE_DEFAULTS[$index]}" "$availability"
   done
 }
 

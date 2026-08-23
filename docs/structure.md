@@ -10,6 +10,11 @@ restructure can relink paths a running machine depends on.
 dependencies, links, lifecycle hooks, and tests. Adding a capability must not
 require a new root switch, manifest entry, syntax path, or test-runner entry.
 
+`enabled = false` parks the entire module without changing existing machine
+state. It is a selection gate, never an uninstall signal. Explicit cleanup is
+still allowed so a module can be cleaned before its directory is eventually
+deleted. `default = false` is only for enabled, opt-in modules.
+
 Prefer `modules/<name>/home/` for new files. Its contents overlay `$HOME` by
 relative path, so adding another file later requires no metadata change.
 Discovery uses Git-visible files (`--cached --others --exclude-standard`), which

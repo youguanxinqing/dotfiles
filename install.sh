@@ -14,9 +14,9 @@ Usage: ./install.sh [--deps-only | --links-only] [--dry-run] [module ...]
        ./install.sh clean [--dry-run] <module>
        ./install.sh list
 
-With no options, install dependencies and links for every default module that
-matches this platform. Modules are discovered from modules/*/module.ini; adding
-a module never requires editing this installer.
+With no options, install dependencies and links for every enabled default
+module that matches this platform. Modules are discovered from
+modules/*/module.ini; adding a module never requires editing this installer.
 EOF
 }
 
@@ -50,7 +50,7 @@ fi
 
 if [[ "$ACTION" == clean ]]; then
   [[ "$MODE" == all && ${#CONFIGS[@]} -eq 1 ]] || { usage >&2; exit 2; }
-  select_modules "${CONFIGS[0]}"
+  module_index "${CONFIGS[0]}" >/dev/null || { echo "Unknown module: ${CONFIGS[0]}" >&2; exit 2; }
   clean_selected_module "${CONFIGS[0]}"
   exit 0
 fi
