@@ -96,12 +96,26 @@ find_brew() {
   }
 }
 
+# Every `brew list`/`brew --prefix` pays ~0.35s of Ruby startup, and a full
+# install re-checks each CLI three times per module. Homebrew records the same
+# fact on disk for the price of a stat: opt/<name> is linked for every installed
+# formula and for its aliases, so `python` resolves without asking which
+# python@3.x it currently means. Casks have no opt link and live in Caskroom.
+brew_has() {
+  local prefix="${BREW%/bin/brew}"
+  [[ -n "$prefix" && "$prefix" != "${BREW:-}" ]] || return 1
+  case "$1" in
+    formula) [[ -d "$prefix/opt/${2##*/}" ]] ;;
+    cask) [[ -d "$prefix/Caskroom/${2##*/}" ]] ;;
+  esac
+}
+
 refresh_environment() {
   ((DRY_RUN)) && return
   if [[ -n "${BREW:-}" ]]; then
     eval "$("$BREW" shellenv bash)"
-    if "$BREW" list --formula rustup >/dev/null 2>&1; then
-      export PATH="$("$BREW" --prefix rustup)/bin:$PATH"
+    if brew_has formula rustup; then
+      export PATH="${BREW%/bin/brew}/opt/rustup/bin:$PATH"
     fi
   fi
   if command -v fnm >/dev/null 2>&1; then
@@ -185,8 +199,8 @@ cli_is_installed() {
   local command="${1:-$CLI_COMMAND}" installer="${2:-$CLI_INSTALLER}" source="${3:-$CLI_SOURCE}"
   case "$installer" in
     script) bash "$ROOT/$source" check >/dev/null 2>&1 ;;
-    brew) [[ -n "${BREW:-}" ]] && "$BREW" list --formula "$source" >/dev/null 2>&1 && command -v "$command" >/dev/null 2>&1 ;;
-    brew-cask) [[ -n "${BREW:-}" ]] && "$BREW" list --cask "$source" >/dev/null 2>&1 && command -v "$command" >/dev/null 2>&1 ;;
+    brew) brew_has formula "$source" && command -v "$command" >/dev/null 2>&1 ;;
+    brew-cask) brew_has cask "$source" && command -v "$command" >/dev/null 2>&1 ;;
     rustup) command -v "$command" >/dev/null 2>&1 && rustup show active-toolchain >/dev/null 2>&1 ;;
     *) command -v "$command" >/dev/null 2>&1 ;;
   esac
@@ -195,8 +209,8 @@ cli_is_installed() {
 cli_is_managed() {
   local command="$1" installer="$2" source="$3"
   case "$installer" in
-    brew) [[ -n "${BREW:-}" ]] && "$BREW" list --formula "$source" >/dev/null 2>&1 ;;
-    brew-cask) [[ -n "${BREW:-}" ]] && "$BREW" list --cask "$source" >/dev/null 2>&1 ;;
+    brew) brew_has formula "$source" ;;
+    brew-cask) brew_has cask "$source" ;;
     cargo) command -v cargo >/dev/null 2>&1 && cargo install --list | grep -Fq "$source v" ;;
     npm) command -v npm >/dev/null 2>&1 && npm list --global --depth=0 "$source" >/dev/null 2>&1 ;;
     script) return 0 ;;

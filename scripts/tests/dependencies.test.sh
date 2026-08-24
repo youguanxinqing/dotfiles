@@ -10,13 +10,13 @@ new_test_root
 BREW_ROOT="$TEST_ROOT/brew"
 BREW_HOME="$BREW_ROOT/home"
 BREW_BIN="$BREW_ROOT/bin"
-mkdir -p "$BREW_HOME" "$BREW_BIN"
+mkdir -p "$BREW_HOME" "$BREW_BIN" \
+  "$BREW_ROOT/opt/feature-only" "$BREW_ROOT/opt/shared" \
+  "$BREW_ROOT/Caskroom/feature-cask"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -eu' \
-  'if [[ "$1" == list && ("$2" == --formula || "$2" == --cask) ]]; then' \
-  '  exit 0' \
-  'elif [[ "$1" == uninstall ]]; then' \
+  'if [[ "$1" == uninstall ]]; then' \
   '  printf '\''%s\n'\'' "$*" >> "$BREW_LOG"' \
   'elif [[ "$1" == shellenv ]]; then' \
   '  exit 0' \
@@ -44,20 +44,19 @@ fi
 # A command from the wrong source does not satisfy a Homebrew declaration.
 SOURCE_ROOT="$TEST_ROOT/brew-source"
 SOURCE_HOME="$SOURCE_ROOT/home"
-SOURCE_BREW_BIN="$SOURCE_ROOT/brew-bin"
+SOURCE_BREW_BIN="$SOURCE_ROOT/bin"
 SOURCE_WRONG_BIN="$SOURCE_ROOT/wrong-bin"
-SOURCE_MARKER="$SOURCE_ROOT/installed"
+SOURCE_CELLAR="$SOURCE_ROOT/opt"
 SOURCE_LOG="$SOURCE_ROOT/brew.log"
-mkdir -p "$SOURCE_HOME" "$SOURCE_BREW_BIN" "$SOURCE_WRONG_BIN"
+mkdir -p "$SOURCE_HOME" "$SOURCE_BREW_BIN" "$SOURCE_WRONG_BIN" "$SOURCE_CELLAR"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$SOURCE_WRONG_BIN/demo"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -eu' \
   'case "${1:-} ${2:-}" in' \
-  '  "list --formula") [[ "${3:-}" == demo && -f "$BREW_SOURCE_MARKER" ]] ;;' \
   '  "shellenv bash") printf '\''export PATH="%s:$PATH"\n'\'' "$BREW_SOURCE_BIN" ;;' \
   '  "install demo")' \
-  '    : > "$BREW_SOURCE_MARKER"' \
+  '    mkdir -p "$BREW_SOURCE_CELLAR/demo"' \
   '    printf '\''#!/usr/bin/env bash\nexit 0\n'\'' > "$BREW_SOURCE_BIN/demo"' \
   '    chmod +x "$BREW_SOURCE_BIN/demo"' \
   '    printf '\''%s\n'\'' "$*" >> "$BREW_SOURCE_LOG"' \
@@ -69,7 +68,7 @@ chmod +x "$SOURCE_WRONG_BIN/demo" "$SOURCE_BREW_BIN/brew" "$SOURCE_BREW_BIN/unam
 printf 'all | demo | demo | brew | demo\n' > "$SOURCE_ROOT/normalized.manifest"
 : > "$SOURCE_LOG"
 PATH="$SOURCE_WRONG_BIN:$SOURCE_BREW_BIN:/usr/bin:/bin" HOME="$SOURCE_HOME" \
-  BREW_SOURCE_BIN="$SOURCE_BREW_BIN" BREW_SOURCE_MARKER="$SOURCE_MARKER" \
+  BREW_SOURCE_BIN="$SOURCE_BREW_BIN" BREW_SOURCE_CELLAR="$SOURCE_CELLAR" \
   BREW_SOURCE_LOG="$SOURCE_LOG" \
   "$ROOT/scripts/install-deps.sh" "$SOURCE_ROOT/normalized.manifest"
 grep -Fqx 'install demo' "$SOURCE_LOG"
