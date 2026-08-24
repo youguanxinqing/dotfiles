@@ -54,23 +54,30 @@ fi
 
 platform=$(uname -s 2>/dev/null || printf 'unknown')
 
-# Values travel through the process environment instead of being interpolated
-# into Lua source. Workspace labels and directory names can therefore contain
-# quotes, brackets, and newlines without becoming executable Lua.
+# `hs -c` hands a string of Lua source to the long-running Hammerspoon process
+# over IPC. The two processes do not share an environment, so anything exported
+# here reads back as nil inside os.getenv and the card renders with empty text.
+# Values therefore have to travel inside the source, but not verbatim: workspace
+# labels and directory names may hold quotes, brackets or newlines, and a Lua
+# long bracket closes early on the first `]]` it meets, which would run the rest
+# of the text as code. Base64 uses only A-Za-z0-9+/=, so it cannot terminate the
+# literal, and Hammerspoon decodes it on arrival.
+lua_base64() { printf '%s' "${1-}" | base64 | tr -d '\n'; }
+
 if [[ $platform == Darwin ]] && command -v hs >/dev/null 2>&1 &&
   pgrep -x Hammerspoon >/dev/null 2>&1; then
+  lua="notificationToast({title=hs.base64.decode('$(lua_base64 "$title")')"
+  lua+=", body=hs.base64.decode('$(lua_base64 "$message")')"
   if [[ -n $agent ]]; then
-    lua='notificationToast({title=os.getenv("DOTFILES_NOTIFY_TITLE"), body=os.getenv("DOTFILES_NOTIFY_MESSAGE"), agent=os.getenv("DOTFILES_NOTIFY_AGENT"), align="right"})'
-  else
-    lua='notificationToast({title=os.getenv("DOTFILES_NOTIFY_TITLE"), body=os.getenv("DOTFILES_NOTIFY_MESSAGE")})'
+    lua+=", agent=hs.base64.decode('$(lua_base64 "$agent")'), align='right'"
   fi
+  lua+="})"
 
-  result=$(
-    DOTFILES_NOTIFY_TITLE="$title" \
-      DOTFILES_NOTIFY_MESSAGE="$message" \
-      DOTFILES_NOTIFY_AGENT="$agent" \
-      hs -t 1 -q -c "$lua" 2>/dev/null || true
-  )
+  # `hs -t` alone is not a reliable bound: when Hammerspoon's main thread is busy
+  # the client can sit on the IPC connection far past the stated timeout, and
+  # this script runs from an agent stop hook, where a hang blocks the agent.
+  # perl's alarm gives a hard ceiling using only what macOS ships by default.
+  result=$(perl -e 'alarm 5; exec @ARGV' hs -t 1 -q -c "$lua" 2>/dev/null || true)
   [[ $result == ok ]] && exit 0
 fi
 
