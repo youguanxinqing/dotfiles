@@ -1,10 +1,11 @@
 function __dotfiles_number_fzf_history
-    set -l index 1
-
-    while read -lz entry
-        printf '%d\t%s\0' $index "$entry"
-        set index (math $index + 1)
-    end
+    # This is how fzf's own numbered widget did it, v0.55 through v0.65, before
+    # upstream switched to builtin timestamps. A Fish loop over ~20k records
+    # burns ~0.4s before fzf can paint; macOS awk cannot take NUL as a record
+    # separator. Upstream also indented continuation lines with `s/\n/\n\t/gm`,
+    # which is left out here: --accept-nth=2.. joins fields keeping their tab,
+    # so that indent would come back as a stray tab in the restored line.
+    command perl -0 -pe 's/^/$.\t/'
 end
 
 function fzf-history-widget -d 'Show command history with classic sequence numbers'
