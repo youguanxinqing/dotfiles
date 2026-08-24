@@ -30,14 +30,14 @@ printf '%s\n' \
   'esac' > "$TEST_BIN/cargo"
 chmod +x "$TEST_BIN/cargo"
 
-PATH="$TEST_BIN:$TEST_HOME/.goup/current/bin:/usr/bin:/bin" HOME="$TEST_HOME" \
+PATH="$TEST_BIN:$TEST_HOME/.goup/current/bin:/usr/bin:/bin" HOME="$TEST_HOME" CARGO_INSTALL_ROOT="$TEST_HOME/.local" \
   GOUP_TEST_TEMPLATE="$TEST_ROOT/goup-template" \
   "$ROOT/modules/goup/install.sh" install
 [[ -x "$TEST_HOME/.local/bin/goup" ]]
-PATH="$TEST_HOME/.local/bin:$TEST_BIN:$TEST_HOME/.goup/current/bin:/usr/bin:/bin" HOME="$TEST_HOME" \
+PATH="$TEST_HOME/.local/bin:$TEST_BIN:$TEST_HOME/.goup/current/bin:/usr/bin:/bin" HOME="$TEST_HOME" CARGO_INSTALL_ROOT="$TEST_HOME/.local" \
   "$ROOT/modules/goup/install.sh" check
-PATH="$TEST_BIN:/usr/bin:/bin" HOME="$TEST_HOME" GOUP_TEST_TEMPLATE="$TEST_ROOT/goup-template" \
+PATH="$TEST_BIN:/usr/bin:/bin" HOME="$TEST_HOME" CARGO_INSTALL_ROOT="$TEST_HOME/.local" GOUP_TEST_TEMPLATE="$TEST_ROOT/goup-template" \
   "$ROOT/modules/goup/install.sh" clean
 [[ ! -e "$TEST_HOME/.local/bin/goup" ]]
-PATH="$TEST_BIN:/usr/bin:/bin" HOME="$TEST_HOME" GOUP_TEST_TEMPLATE="$TEST_ROOT/goup-template" \
+PATH="$TEST_BIN:/usr/bin:/bin" HOME="$TEST_HOME" CARGO_INSTALL_ROOT="$TEST_HOME/.local" GOUP_TEST_TEMPLATE="$TEST_ROOT/goup-template" \
   "$ROOT/modules/goup/install.sh" clean
