@@ -15,4 +15,9 @@ end
 if test -r "$HOME/.goup/env"
     source "$HOME/.goup/env"
     set -e GOROOT
+    # goup's env script registers its directories in fish_user_paths, which Fish
+    # keeps behind everything appended to $PATH from here. Homebrew's go — pulled
+    # in as a dependency of gopls, goimports and staticcheck — would then win and
+    # defeat goup's version selection, so move goup ahead explicitly.
+    fish_add_path --global --move --path "$HOME/.goup/bin" "$HOME/.goup/current/bin"
 end
