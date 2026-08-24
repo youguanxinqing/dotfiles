@@ -1,0 +1,12 @@
+name: knowledge
+root: ~/Documents/forlang/097-fav
+
+
+startup_window: main
+
+windows:
+  - main:
+      layout: even-horizontal
+      panes:
+        - claude: claude
+        - editor: nvim

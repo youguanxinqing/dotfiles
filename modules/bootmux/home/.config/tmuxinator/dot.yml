@@ -1,0 +1,14 @@
+name: dot
+root: ~/dotfiles
+
+startup_window: main
+
+windows:
+  - main:
+      layout: even-horizontal
+      panes:
+        - claude: claude
+        - editor: nvim
+  - misc:
+      panes:
+        - claude: claude
