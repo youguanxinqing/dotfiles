@@ -21,27 +21,44 @@ is gitignored — 220M does not belong in the repo. For a while nothing declared
 which plugins to install, so a new machine finished `install.sh` with every one
 of those keys dead.
 
-The fix is `features/herdr/install-plugins.sh`, using the `script` installer
-`cli.conf` already supports and implementing `check` / `install` / `clean`.
-Follow that pattern for anything else where config points outside the repo.
+The fix is `modules/herdr/install.sh`, using the module's `script` dependency
+and implementing `check` / `install` / `clean`. Follow that pattern for
+anything else where config points outside the repo.
+
+## A platform can need a native integration, not just a different package
+
+Fish is the example. macOS can use the shared Homebrew adapter, while Linux
+needs a module-local script: ordinary distributions install the system Fish
+package, but Omarchy installs `omarchy-fish` and keeps Bash as the login shell.
+The module detects Omarchy from `/etc/os-release` instead of asking the user to
+choose a mode.
+
+`modules/fish/platform.sh` owns that detection and the bounded `~/.bashrc`
+handoff. Runtime changes are backed up under
+`~/.local/state/dotfiles/backups/`, and the installer method is recorded in
+`~/.local/state/dotfiles/fish-installer` so an explicit clean never removes a
+Fish installation that this repository did not install.
 
 ## Installed ≠ right version ≠ right source
 
-`cli_is_installed` in `install-deps.sh` runs a bare `command -v`, so
-`CLI check passed` does not mean the machine matches what is declared. Two real
-divergences:
+For Homebrew formulae and casks, `cli_is_installed` requires both the declared
+package and its command. A same-named command from another package manager no
+longer satisfies the declaration. Other installer adapters still rely on a
+bare `command -v`, so `CLI check passed` does not universally mean the machine
+matches what is declared. Two historical divergences motivated the stricter
+Homebrew check:
 
 - **Stale version.** herdr sat at 0.8.0 while the manifest only asked for
   "herdr". Its theme rendering differed from another machine, and the cause took
   a while to find: 0.8.2 changed theme painting (release notes #2792, #2987).
 - **Wrong source.** `nvim`, `tmux`, `rg`, `fd`, `fnm`, `overmind`, and `direnv`
-  all come from `/opt/nanobrew/prefix/bin`, while `cli.conf` declares brew.
+  all come from `/opt/nanobrew/prefix/bin`, while their modules declare brew.
   `command -v` finds them, so the brew copies never get installed.
 
-`cli_is_managed` is the predicate that checks the real source
-(`brew list --formula`, `cargo install --list`, and so on), but it is only
-called on the clean path. Wiring it into `verify_manifest` would surface these;
-pinning versions would need a `min_version` field in `cli.conf`.
+`cli_is_managed` remains the cleanup predicate for Cargo, npm, scripts, and
+other adapters. Extending source verification beyond Homebrew would require
+installer-specific checks; pinning versions would need a `min_version` key in
+dependency sections.
 
 ## One trap when scripting against herdr
 

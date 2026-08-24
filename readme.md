@@ -1,170 +1,286 @@
 # My Dotfiles
 
-One dotfiles setup for macOS and Linux. Core command-line tools are declared in `cli.conf`, and
-optional tools are declared by their feature. Each declaration names the expected command and its
-installer, so Brew, Cargo, FNM, Go, npm, rustup, and custom Git/download flows share the same
-installation lifecycle. The installer never overwrites an existing configuration path.
+One dotfiles setup for macOS and Linux. Capabilities are self-contained under
+`modules/<name>/` and are discovered automatically. There is no central package,
+feature, link, syntax-test, or module registry to update when software is added.
+Ordinary links never overwrite unmanaged paths. Modules that explicitly use a
+managed entry or copy back up an existing file before adopting it.
 
 ## First-time initialization
 
-Git is the only prerequisite because it is needed to download the installer. Fish does not need to
-be installed beforehand. Initialize a new machine with one command:
+Git is the only prerequisite. Fish is installed as a module and does not need to
+exist beforehand:
 
 ```bash
 git clone --recurse-submodules https://github.com/youguanxinqing/dotfiles.git ~/dotfiles && ~/dotfiles/install.sh
 ```
 
-The first run installs Homebrew when a missing CLI needs it. On Linux, it also installs the required
-build tools through `apt-get`, `dnf`, or `pacman`. Re-running `./install.sh` is safe: it checks each
-desired command, installs only missing CLIs, and creates missing links without replacing existing
-paths. Use `./install.sh --dry-run` first when an installation preview is needed.
+The first run installs Homebrew when a selected module needs it. On Linux, it
+can install Homebrew prerequisites through `apt-get`, `dnf`, or `pacman`.
+Re-running `./install.sh` is safe: missing dependencies and links are added,
+already-correct state is kept, unmanaged link destinations are skipped, and
+managed files are reconciled with backup and drift checks.
 
-Fish is installed through the root CLI manifest, and the installer links this repository's Fish
-configuration to `~/.config/fish`. At the end of an interactive installation, the installer checks
-the Fish binary and asks whether it should become the login shell. It verifies every enabled CLI
-before reporting success.
+A real install completes each module's dependencies, links, and hooks before
+advancing in `order`. Fish has `order = 0`, so its Omarchy handoff is complete
+before optional Homebrew taps or later plugins are attempted. If a later module
+fails, fix that dependency and rerun; already-completed modules remain usable.
+Dry-run keeps dependency discovery as one combined preview so package-manager
+bootstrap is shown only once.
 
-Apply future incremental changes with one command:
+Fish's module links `~/.config/fish` and selects its integration from the
+machine it is running on:
+
+- On Omarchy, it installs the official `omarchy-fish` package, keeps Bash as
+  the login shell, and adds a bounded Bash-to-Fish handoff to `~/.bashrc`.
+  Existing Bash configuration is preserved and backed up before the first
+  change. Re-running the installer does not create another block or backup.
+- On other Linux distributions, it installs Fish with `apt-get`, `dnf`, or
+  `pacman`, then offers to make Fish the login shell in an interactive run.
+- On macOS, it installs Fish with Homebrew and offers the same login-shell
+  switch.
+
+The Omarchy path is detected automatically from `/etc/os-release`, with the
+Omarchy command and installation directory as compatibility signals. It never
+uses `chsh` to make Fish the Omarchy login shell. If a machine was changed that
+way previously, restore `/usr/bin/bash` before running the installer.
+
+```bash
+./install.sh --dry-run                 # Preview a full install
+./install.sh list                      # Show discovered modules and platforms
+./install.sh --deps-only               # Install dependencies only
+./install.sh --deps-only mihomo        # Install one module's dependencies
+./install.sh --links-only              # Link configurations only
+./install.sh --links-only fish tmux    # Link selected modules only
+./install.sh clean --dry-run herdr     # Preview owned-state cleanup
+./install.sh clean herdr               # Clean one module
+./scripts/test-install.sh              # Run auto-discovered checks
+```
+
+Apply future incremental changes with:
 
 ```bash
 git -C ~/dotfiles pull --ff-only && ~/dotfiles/install.sh
 ```
 
-Common commands:
+Node.js is managed by FNM, Go by goup.rs, and Rust by rustup. This repository
+does not use mise.
 
-```bash
-./install.sh --deps-only               # Install dependencies only
-./install.sh --links-only              # Link all enabled configurations only
-./install.sh --links-only fish tmux    # Link selected configurations only
-./install.sh clean --dry-run herdr     # Preview cleanup for a disabled feature
-./install.sh clean herdr               # Clean a disabled feature
-```
+## The module boundary
 
-Node.js is managed by FNM, Go versions by goup.rs, and Rust by rustup. This repository does not use
-mise.
-
-## Repository layout
-
-The user-edited installation files stay at the repository root; implementation details stay under
-`scripts/`, and optional behavior stays local to its feature:
+Every direct child of `modules/` with a `module.ini` is a module. All other
+files are optional and discovered by convention:
 
 ```text
-cli.conf                    Core CLI desired state
-features.conf               Optional feature switches
-navigation.txt              Core configuration links
-features/<name>/cli.conf    Optional CLI desired state
-features/<name>/navigation.txt
-scripts/install-deps.sh     CLI installer implementation
-scripts/installers/         Custom installers used only when a standard installer is insufficient
-configs/<name>/             Application and shell configuration sources
-docs/                       Conventions and pitfalls, loaded on demand from CLAUDE.md
+modules/<name>/
+├── module.ini        module metadata, dependencies, and shared-source links
+├── home/             Git-visible files overlaid onto $HOME automatically
+├── install.sh        custom check/install/clean lifecycle, when needed
+├── post-links.sh     hook after links are installed
+├── post-install.sh   hook after dependencies are installed
+└── test.sh           module-local test, discovered automatically
 ```
 
-Application and shell configuration lives under `configs/`; executable commands remain in `bin/`,
-installer implementation in `scripts/`, and optional behavior in `features/`.
+The existing `configs/` and `bin/` trees remain stable source locations so this
+refactor does not churn every active symlink. New modules should normally put
+their files under `home/`; files added below that directory need no manifest
+entry. Ignored runtime state is not linked.
 
-## Adding a CLI
+`scripts/module-engine.sh` owns discovery, link safety, and link ownership
+state. `scripts/install-deps.sh` provides reusable package-manager adapters.
+Tests under `scripts/tests/*.test.sh` and `modules/*/test.sh`, plus all
+Git-visible shell scripts, are discovered without a maintained path list.
 
-Each non-comment line in `cli.conf` has five pipe-separated fields:
+Desktop integrations also have stable capability entry points. Scripts and
+configs should pipe clipboard data to `g-copy` and send notifications through
+`g-notify`, rather than naming `pbcopy`, `wl-copy`,
+`terminal-notifier`, or `notify-send` themselves. Both helpers are discovered
+and linked automatically by the existing `bin` module.
+
+## Adding software
+
+For a standard package, add one author-facing file:
 
 ```text
-platform | id | command | installer | source
+modules/jq/module.ini
 ```
 
-`platform` is `all`, `macos`, or `linux`. `command` is the executable used for incremental checks.
-Existing commands are always kept. When a command is missing, prefer an upstream Homebrew formula
-or tap; use another adapter only when Homebrew is unavailable upstream. The built-in installers are
-`brew`, `brew-cask`, `cargo`, `fnm`, `go`, `npm`, and `rustup`:
-
-```text
-all   | jq      | jq      | brew  | jq
-macos | tool-ui | tool-ui | brew-cask | tool-ui
-all   | tool-a  | tool-a  | cargo | tool-a
-all   | tool-b  | tool-b  | npm   | @owner/tool-b
-linux | tool-c  | tool-c  | go    | example.com/owner/tool-c@latest
-```
-
-If installation requires Git, a release download, or an official shell installer, use the `script`
-installer instead of embedding shell code in the manifest:
-
-```text
-all | tool-d | tool-d | script | scripts/installers/tool-d.sh
-```
-
-The script receives `check`, `install`, or `clean`. `check` must be read-only and return success only
-when the CLI is ready. `install` and `clean` must be safe to run repeatedly. Download scripts should
-use HTTPS, pin a version, and verify a published checksum when available; do not use `curl | sh`.
-After adding a declaration, run `./install.sh --dry-run` and then `./install.sh`.
-
-## Optional features
-
-`features.conf` controls optional feature groups. Herdr is enabled by default:
+`module.ini` uses named sections and keys instead of positional fields:
 
 ```ini
-herdr=true
+[module]
+platforms = all
+enabled = true
+default = true
+order = 10
+
+[dependency jq]
+command = jq
+installer = brew
+source = jq
 ```
 
-Each group lives under `features/<name>/` and may contain its own `cli.conf` and `navigation.txt`.
-For example, add a Cloud feature by creating `features/cloud/` and adding `cloud=true` to
-`features.conf`. Run `./install.sh` again to install its missing dependencies and create its missing
-links.
+The `[module]` values default to `platforms = all`, `enabled = true`,
+`default = true`, and `order = 50`. A dependency section's name is its stable
+dependency id; `platform` is optional and defaults to `all`.
 
-Set a feature to `false` or comment it out to skip it during normal installation. This does not
-automatically remove existing software or configuration. To clean it explicitly, disable it first
-and run:
+Set `enabled = false` to park a module temporarily. Normal installs and direct
+module selection will skip/refuse it, while its installed software, existing
+links, and ownership records remain untouched. No cleanup is triggered by the
+switch. If cleanup is eventually wanted, `./install.sh clean <module>` remains
+available while the module is disabled; run it before deleting the module from
+the repository. `default = false` has a different purpose: the module stays
+enabled and can be selected explicitly, but is omitted from an install with no
+module arguments.
 
-```bash
-./install.sh clean cloud
+Built-in installers are `brew`, `brew-cask`, `cargo`, `fnm`, `go`, `npm`, and
+`rustup`:
+
+```ini
+[dependency tool-ui]
+platform = macos
+command = tool-ui
+installer = brew-cask
+source = tool-ui
+
+[dependency tool-b]
+command = tool-b
+installer = npm
+source = @owner/tool-b
 ```
 
-Cleanup removes only symbolic links that still point into this repository and CLIs declared
-exclusively by that feature. CLIs also declared by the core or another enabled feature are retained.
-Brew, Cargo, npm, and custom script installers support cleanup; optional tools installed through
-another method should use a custom script when automatic cleanup is required. Use `--dry-run` to
-preview cleanup. Empty directories and paths whose ownership cannot be verified are never removed
-automatically.
+For a Git checkout, release download, upstream installer, or special cleanup,
+put an idempotent `install.sh` in the same module. Script sources are resolved
+relative to that module:
 
-## Configuration links
+```ini
+[dependency tool-d]
+command = tool-d
+installer = script
+source = install.sh
+```
 
-The root `navigation.txt` contains core links; optional features use their own `navigation.txt`.
-Fish, Kitty, WezTerm, and Ghostty link their full configuration directories. tmux links
-`~/.tmux.conf`; its helper commands are published with the other commands in `~/.local/bin`. Herdr
-links only the declared config files, preserving plugin code and runtime directories. Existing
-unmanaged destinations are reported and skipped; the installer never overwrites them or blocks the
-remaining incremental work.
+The script receives `check`, `install`, or `clean`. `check` must be read-only.
+Downloads should use HTTPS, pin a version, and verify a published checksum when
+available; do not use `curl | sh`.
 
-`bin/` is the source of personal commands. The installer links each executable into
-`~/.local/bin`, and Fish adds that standard directory to `PATH`, so commands keep working when the
-repository is cloned elsewhere.
+The parser is deliberately strict and dependency-free. Sections must be
+`[module]`, `[dependency <id>]`, or `[link <id>]`; duplicate/unknown keys are
+errors. Values are unquoted raw text. `#` and `;` start comments only when they
+are the first non-space character on a line, so URLs and paths are preserved.
+
+## Adding configuration or commands
+
+The preferred layout needs no link declaration:
+
+```text
+modules/tool-d/home/.config/tool-d/config.toml
+modules/tool-d/home/.local/bin/tool-d-helper
+```
+
+Every Git-visible file below `home/` is linked to the corresponding path below
+`$HOME`; a file added later is picked up on the next run automatically. Add a
+`[link <id>]` section only for an existing shared source or when a whole
+directory must be linked as one unit:
+
+```ini
+[link config]
+platform = all
+mode = tree
+source = configs/fish
+target = ~/.config/fish
+
+[link commands]
+mode = overlay
+source = bin
+target = ~/.local/bin
+
+[link application-entry]
+platform = linux
+mode = entry
+source = configs/tool/config
+target = ~/.config/tool/config
+template = include {source}
+
+[link application-copy]
+mode = copy
+source = configs/tool/config.toml
+target = ~/.config/tool/config.toml
+```
+
+`tree` links one file or directory. `overlay` recursively links Git-visible
+files while leaving unrelated runtime files at the target untouched. Targets
+that are not repository-owned links are reported and skipped.
+
+`entry` writes a small regular entry file whose `template` must contain
+`{source}`. That placeholder expands to a stable path below
+`~/.local/share/dotfiles/current`, a single symlink to the active checkout.
+Applications such as Ghostty and Kitty can therefore include the repository
+configuration live without giving Omarchy a writable symlink back into Git.
+
+`copy` atomically deploys one regular repository file. It is for applications
+such as Herdr that do not support includes. The first existing target is backed
+up; later runs use the last deployed fingerprint to distinguish a repository
+update from runtime drift. Runtime-only drift is backed up and restored from
+the repository. If both sides changed, installation stops and leaves both
+files untouched for manual resolution.
+
+Successful links are recorded under
+`${XDG_STATE_HOME:-~/.local/state}/dotfiles/links.tsv`. Cleanup removes only an
+exact recorded link that still points to its recorded source. Empty directories
+and paths whose ownership cannot be proven are never removed automatically.
+Managed entries and copies are recorded in the adjacent `managed.tsv`; their
+displaced files are stored below `backups/<module>/`. Cleanup removes a managed
+file only while its fingerprint still matches the last deployment, and never
+removes the shared repository pointer.
+
+On Linux, Ghostty and Kitty use managed entries. Their main configuration stays
+in this repository and changes take effect through the application's normal
+reload path. Herdr uses a managed copy for `config.toml`, while its plugin
+configuration remains an overlay so newly tracked plugin files are discovered
+without another manifest edit.
+
+## Platform-specific modules
+
+Platform selection belongs in the module, not in the root installer. For
+example, Hammerspoon declares `platforms = macos`, so neither its application
+nor its configuration is installed on Linux. Mihomo declares
+`platforms = linux`.
+
+### Mihomo on Linux
+
+`modules/mihomo/install.sh` pins the official Mihomo release, verifies its
+published SHA-256 digest, installs `~/.local/bin/mihomo`, and grants only
+`cap_net_admin` and `cap_net_raw` for TUN networking. Capability verification is
+repeated after every binary replacement.
+
+The module manages `~/.config/systemd/user/mihomo.service` as a link to its own
+unit. An existing unit is timestamp-backed-up first. The user service is
+enabled automatically and restarted only when
+`~/.config/mihomo/config.yaml` exists. Proxy configuration, providers,
+subscriptions, caches, and dashboards remain machine-private. Automatic
+cleanup is deliberately disabled so a cleanup command cannot silently stop the
+proxy or delete its configuration.
 
 ## Private configuration
 
-Only shareable defaults and `*.template` files belong in this public repository. Store real proxy
-settings, remote hosts, credentials, and machine-specific configuration in ignored paths such as:
+Only shareable defaults and `*.template` files belong in this public repository.
+Store real proxy settings, remote hosts, credentials, and machine-specific
+configuration in ignored paths such as:
 
 - `configs/fish/local.d/`
 - `configs/fish/conf.d/variables/proxy.fish`
 - `configs/wezterm/config/private_remote/`
 
-Run the privacy check before publishing changes:
-
-```bash
-./scripts/check-private.sh
-```
-
-This check catches common mistakes only. Removing a sensitive value from the current tree does not
-remove it from Git history; rewrite the history and rotate the affected credential if a secret was
-ever committed.
+Run `./scripts/check-private.sh` before publishing. Removing a secret from the
+current tree does not remove it from Git history; rewrite history and rotate the
+credential if one was ever committed.
 
 ## Herdr plugins
 
-```bash
-./install.sh --deps-only
-```
-
-The exact plugin sources and refs live in `features/herdr/install-plugins.sh`. The plugins require
-`fzf`, `rg`, `bat`, `nvim`, `node`, and `gh`; those commands are declared in the root CLI manifest,
-and FNM manages Node.
+Herdr's module owns both the command and plugin lifecycle. Exact plugin sources
+and refs live in `modules/herdr/install.sh`; Git-ignored plugin code and runtime
+state stay outside this repository.
 
 ## Fonts
 

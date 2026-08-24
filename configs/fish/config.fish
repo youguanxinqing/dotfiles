@@ -1,24 +1,15 @@
+# System/vendor conf.d files run before config.fish. Omarchy's Fish package
+# initializes Starship and its own fzf bindings there, so re-apply the
+# repository-owned interactive UI last. Calling the binding function here also
+# guarantees that Fish autoloads it before checking for user bindings.
 if status is-interactive
-    # Commands to run in interactive sessions can go here
+    source "$__fish_config_dir/functions/fish_prompt.fish"
+    source "$__fish_config_dir/functions/fish_right_prompt.fish"
+    fish_user_key_bindings
 end
 
-function fish_right_prompt
-  echo "<<< "
-  date "+%y-%m-%d %H:%M:%S"
+# Machine-local overrides stay outside the repository.
+set -l local_config "$HOME/.config/fish/local.d/local.fish"
+if test -r "$local_config"
+    source "$local_config"
 end
-
-function fish_prompt
-  echo -n -s (set_color red) '@'(whoami) ' '\
-    (set_color yellow) (prompt_pwd) \
-    (set_color yellow) (fish_git_prompt) '$ '
-end
-
-
-# using local fish
-set -l FISH_LOCAL_FILE ~/.config/fish/local.d/local.fish
-if test -e $FISH_LOCAL_FILE
-  source $FISH_LOCAL_FILE
-end
-
-fish_user_key_bindings
-

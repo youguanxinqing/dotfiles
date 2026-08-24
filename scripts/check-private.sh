@@ -16,7 +16,7 @@ done < <(git ls-files -z --cached --others --exclude-standard)
 
 failed=0
 check() {
-  local label="$1" pattern="$2" file match line rest
+  local label="$1" pattern="$2" file match line rest safe_rest
   for file in "${FILES[@]}"; do
     [[ "$file" == scripts/check-private.sh || ! -f "$file" ]] && continue
     grep -Iq . "$file" || continue
@@ -25,6 +25,10 @@ check() {
       line="${match%%:*}"
       rest="${match#*:}"
       [[ "$label" == "personal home path" && "$rest" == *'/home/linuxbrew/.linuxbrew'* ]] && continue
+      if [[ "$label" == "personal home path" && "$rest" == *modules/*/home/* ]]; then
+        safe_rest="$(printf '%s\n' "$rest" | sed -E 's#modules/[A-Za-z0-9._-]+/home/#modules/<name>/HOME/#g')"
+        printf '%s\n' "$safe_rest" | grep -Eq "$pattern" || continue
+      fi
       [[ "$label" == "email address" && ("$rest" == *'git@github.com'* || "$rest" == *'git@bitbucket.com'*) ]] && continue
       printf '%s:%s: possible %s\n' "$file" "$line" "$label" >&2
       failed=1

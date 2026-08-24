@@ -5,13 +5,13 @@ onboarding = false
 agent_panel_sort = "priority"
 
 # agent 完成的通知不走 herdr：由 Claude Code 的 Stop hook -> bin/agent-done-toast
-# -> Hammerspoon 右上角卡片负责，herdr 再弹一个是重复。
+# -> g-notify 交给当前平台的桌面后端，herdr 再弹一个是重复。
 # 也试过 delivery = "herdr"（终端内浮层）：样式只能调 accent 和 panel_bg，且切出
 # 终端就看不到，而这个通知的全部价值就在你没盯着终端的时候。
 #
 # 注意：off 之后 `herdr notification show` 一律返回
 # {"shown":false,"reason":"disabled"} —— 脚本不要拿它当兜底，
-# bin/herdr-agent-attention 踩过这个坑，现在退回 terminal-notifier。
+# bin/herdr-agent-attention 踩过这个坑，现在交给 g-notify 选择系统后端。
 [ui.toast]
 delivery = "off"
 

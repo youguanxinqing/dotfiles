@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# 任务完成通知：右上角一张绿卡片，标题行右侧标出是哪个 agent 发的。
+# 任务完成通知：macOS 使用 Hammerspoon 卡片，Linux 使用桌面系统通知。
 # 用法: agent-done-toast <agent> [兜底位置]
 #
 # 挂着 20+ 个 agent 时光说"完成了"没用，得说清是哪一个。原来的
-# terminal-notifier1.fish 拼的是 tmux 的 [session:window]；herdr 里对应
-# workspace 和 tab 的 label —— env 里只有 id，label 要回查 api snapshot。
+# tmux 里可以显示 [session:window]；herdr 里对应 workspace 和 tab 的
+# label —— env 里只有 id，label 要回查 api snapshot。
 #
 # 钩子失败会污染 agent 的输出，所以这里一路兜底、始终 exit 0。
 set -uo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
 
 agent=${1:-agent}
 fallback=${2:-}
@@ -25,23 +27,14 @@ if [[ -n ${HERDR_WORKSPACE_ID:-} ]]; then
     ' 2>/dev/null || true)
 fi
 
-# 在 herdr 之外跑（或查不到 label）时退回调用方给的位置。
+# 在 herdr 之外跑（或查不到 label）时退回 tmux 上下文和调用方给的位置。
+if [[ -z $where && -n ${TMUX:-} ]] && command -v tmux >/dev/null 2>&1; then
+  tmux_context=$(tmux display-message -p '[#S:#W] ' 2>/dev/null || true)
+  where="$tmux_context$fallback"
+fi
 [[ -n $where ]] || where=$fallback
 : "${where:=unknown}"
 
-# Lua 的长括号 [[...]] 遇到 ]] 就提前闭合，后面的文案会被当代码跑。
-# label / 目录名里 ] 没有意义，直接删掉最省事。
-where=${where//]/}
-agent=${agent//]/}
-
-# Hammerspoon 没跑就退回 terminal-notifier（原来的行为）。
-# -t 1 是必需的：不带超时且 Hammerspoon 没启动时，hs 会停在「要不要帮你启动」的确认上。
-toast="notificationToast({title=[[任务完成]], body=[[$where]], agent=[[$agent]], align=[[right]]})"
-if pgrep -x Hammerspoon >/dev/null &&
-  [[ $(hs -t 1 -q -c "$toast" 2>/dev/null) == ok ]]; then
-  exit 0
-fi
-
-"$(dirname "$(readlink -f "$0")")/terminal-notifier1.fish" \
-  -title "✅ $agent" -message "任务完成 · $where" >/dev/null 2>&1 || true
+"$here/g-notify" --title "任务完成" --message "$where" --agent "$agent" \
+  >/dev/null 2>&1 || true
 exit 0

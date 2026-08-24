@@ -3,19 +3,26 @@
 set -eo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
+# This consumes normalized, pipe-delimited manifests generated internally from
+# module.ini. Repository authors edit named INI fields, not this wire format.
 ACTION=install
 DRY_RUN=0
 CLI_MANIFESTS=()
 FAILED_CLIS=()
 HOMEBREW_INSTALL_COMMIT=cced90146ea6d3057c03a636b668fef177415eb3
-export PATH="$HOME/.cargo/bin:$HOME/.goup/current/bin:$HOME/go/bin:$PATH"
+# New user-installed CLIs are published into one stable bin directory. Legacy
+# locations stay on this bootstrap-only PATH so an existing machine can still
+# run the installer that migrates it.
+export CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT:-$HOME/.local}"
+export GOBIN="${GOBIN:-$HOME/.local/bin}"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.goup/current/bin:$HOME/go/bin:$PATH"
 
 [[ "${1:-}" == --clean ]] && { ACTION=clean; shift; }
 while (($#)); do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --*)
-      echo "Usage: $0 [--dry-run] [cli.conf ...] | --clean [--dry-run] <cli.conf> [keep-cli.conf ...]" >&2
+      echo "Usage: $0 [--dry-run] <manifest> [...] | --clean [--dry-run] <manifest> [keep-manifest ...]" >&2
       exit 2
       ;;
     *) CLI_MANIFESTS+=("$1") ;;
@@ -139,7 +146,7 @@ needs_brew() {
       ((line_number += 1))
       if parse_cli_line "$manifest" "$line_number" "$line" && platform_matches \
         && [[ "$CLI_INSTALLER" == brew || "$CLI_INSTALLER" == brew-cask ]] \
-        && ! command -v "$CLI_COMMAND" >/dev/null 2>&1; then
+        && ! cli_is_installed; then
         return 0
       fi
     done < "$manifest"
@@ -178,7 +185,8 @@ cli_is_installed() {
   local command="${1:-$CLI_COMMAND}" installer="${2:-$CLI_INSTALLER}" source="${3:-$CLI_SOURCE}"
   case "$installer" in
     script) bash "$ROOT/$source" check >/dev/null 2>&1 ;;
-    brew-cask) command -v "$command" >/dev/null 2>&1 || { [[ -n "${BREW:-}" ]] && "$BREW" list --cask "$source" >/dev/null 2>&1; } ;;
+    brew) [[ -n "${BREW:-}" ]] && "$BREW" list --formula "$source" >/dev/null 2>&1 && command -v "$command" >/dev/null 2>&1 ;;
+    brew-cask) [[ -n "${BREW:-}" ]] && "$BREW" list --cask "$source" >/dev/null 2>&1 && command -v "$command" >/dev/null 2>&1 ;;
     rustup) command -v "$command" >/dev/null 2>&1 && rustup show active-toolchain >/dev/null 2>&1 ;;
     *) command -v "$command" >/dev/null 2>&1 ;;
   esac
@@ -213,23 +221,23 @@ install_cli() {
       run "$BREW" install --cask "$CLI_SOURCE"
       ;;
     cargo)
-      command -v cargo >/dev/null 2>&1 || { echo "cargo is required to install $CLI_ID." >&2; return 1; }
+      command -v cargo >/dev/null 2>&1 || ((DRY_RUN)) || { echo "cargo is required to install $CLI_ID." >&2; return 1; }
       run cargo install "$CLI_SOURCE"
       ;;
     fnm)
-      command -v fnm >/dev/null 2>&1 || { echo "fnm is required to install $CLI_ID." >&2; return 1; }
+      command -v fnm >/dev/null 2>&1 || ((DRY_RUN)) || { echo "fnm is required to install $CLI_ID." >&2; return 1; }
       if [[ "$CLI_SOURCE" == lts ]]; then run fnm install --lts; else run fnm install "$CLI_SOURCE"; fi
       ;;
     go)
-      command -v go >/dev/null 2>&1 || { echo "Go is required to install $CLI_ID; install it with goup first." >&2; return 1; }
+      command -v go >/dev/null 2>&1 || ((DRY_RUN)) || { echo "Go is required to install $CLI_ID; install it with goup first." >&2; return 1; }
       run go install "$CLI_SOURCE"
       ;;
     npm)
-      command -v npm >/dev/null 2>&1 || { echo "npm is required to install $CLI_ID." >&2; return 1; }
+      command -v npm >/dev/null 2>&1 || ((DRY_RUN)) || { echo "npm is required to install $CLI_ID." >&2; return 1; }
       run npm install --global "$CLI_SOURCE"
       ;;
     rustup)
-      command -v rustup >/dev/null 2>&1 || { echo "rustup is required to install $CLI_ID." >&2; return 1; }
+      command -v rustup >/dev/null 2>&1 || ((DRY_RUN)) || { echo "rustup is required to install $CLI_ID." >&2; return 1; }
       run rustup default "$CLI_SOURCE"
       ;;
     script)
@@ -344,14 +352,15 @@ if [[ "$ACTION" == clean ]]; then
   exit 0
 fi
 
-CLI_MANIFESTS=("$ROOT/cli.conf" "${CLI_MANIFESTS[@]}")
+((${#CLI_MANIFESTS[@]})) || {
+  echo "At least one dependency manifest is required." >&2
+  exit 2
+}
+BREW="$(find_brew || true)"
 if needs_brew "${CLI_MANIFESTS[@]}"; then
-  BREW="$(find_brew || true)"
   if [[ -z "$BREW" ]] && ! install_homebrew; then
     echo "Homebrew installation failed; continuing to check all CLIs." >&2
   fi
-else
-  BREW="$(find_brew || true)"
 fi
 refresh_environment
 
@@ -373,8 +382,3 @@ else
   done
   echo "CLI check passed."
 fi
-
-git config --global --get core.pager >/dev/null 2>&1 || run git config --global core.pager delta
-git config --global --get interactive.diffFilter >/dev/null 2>&1 || run git config --global interactive.diffFilter "delta --color-only"
-git config --global --get delta.navigate >/dev/null 2>&1 || run git config --global delta.navigate true
-git config --global --get merge.conflictStyle >/dev/null 2>&1 || run git config --global merge.conflictStyle zdiff3
