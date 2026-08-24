@@ -76,13 +76,13 @@ printf '%s\n' \
   'printf '\''%s\n'\'' "$*" > "$ADAPTER_ARGS_LOG"' \
   'printf '\''ok\n'\''' > "$ADAPTER_BIN/hs"
 chmod +x "$ADAPTER_BIN/pgrep" "$ADAPTER_BIN/hs"
-PATH="$ADAPTER_BIN" ADAPTER_TEST_LOG="$TEST_ROOT/hs-env.log" \
+# base64 and tr live outside the stub directory; the adapter encodes with them.
+PATH="$ADAPTER_BIN:/usr/bin:/bin" ADAPTER_TEST_LOG="$TEST_ROOT/hs-env.log" \
   ADAPTER_ARGS_LOG="$TEST_ROOT/hs-args.log" \
   "$ROOT/bin/g-notify" --title 'Title "quoted" ]]' --message 'body with spaces' --agent codex
-grep -Fqx 'Title "quoted" ]]' "$TEST_ROOT/hs-env.log"
-grep -Fqx 'body with spaces' "$TEST_ROOT/hs-env.log"
-grep -Fqx codex "$TEST_ROOT/hs-env.log"
-grep -Fq 'os.getenv("DOTFILES_NOTIFY_TITLE")' "$TEST_ROOT/hs-args.log"
+for value in 'Title "quoted" ]]' 'body with spaces' codex; do
+  grep -Fq "$(printf '%s' "$value" | base64 | tr -d '\n')" "$TEST_ROOT/hs-args.log"
+done
 if grep -Fq 'Title "quoted" ]]' "$TEST_ROOT/hs-args.log"; then
   echo "Notification text was interpolated into Lua source." >&2
   exit 1
