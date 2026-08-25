@@ -43,6 +43,10 @@ if test -e $FISH_PROXY_FILE
     set -e  HTTPS_PROXY"
 end
 
+# `..` 不用配，fish 的 implicit cd 认 `.` / `..` / 带 `/` 的路径（裸目录名不认）。
+# `...` 只能靠 abbr，而 abbr 只在交互式下展开——脚本里写 `...` 会是 Unknown command。
+abbr -a ... "cd ../.."
+
 abbr -a z "zellij"
 abbr -a za "zellij attach"
 abbr -a zls "zellij ls"
