@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# herdr 的 tab_bar_right 只会「跑一条命令、取最后一行」，没有 tmux 那种插件位，
+# 所以 tmux-powerkit 的 ping/cpu/memory 三块在这边各自是一个子命令。
+# 取数照抄 powerkit 的 macOS 分支，是为了让两边显示的数字对得上。
+# ponytail: 只做 macOS。Linux 上 ping 的 -t 是 TTL 不是超时，top 也没有这个格式，
+# 真要跨平台就按 uname 分支，现在没有那台机器。
+set -euo pipefail
+
+case "${1:-}" in
+ping)
+  # 失败就让退出码非 0：herdr 收到失败会把这一格清空，比显示一个陈旧的延迟好。
+  ping -c 1 -t 2 "${2:-61.139.2.69}" |
+    awk -F/ '/round-trip/ {printf "󰛳 %.0fms\n", $5}'
+  ;;
+cpu)
+  # -n 0 省掉进程列表：1.9s -> 0.08s。这一行是最近一次采样，不是开机以来的均值，
+  # 加负载能看到它动。idle 是逗号分段里的最后一段。
+  top -l 1 -n 0 | awk -F'[,%]' '/CPU usage/ {printf " %.0f%%\n", 100 - $(NF - 1)}'
+  ;;
+mem)
+  # memory_pressure 的 free percentage 只有整数精度，所以 used 也只能到 1% ——
+  # 和 tmux 那侧同源，两个 bar 不会互相打架。
+  free=$(memory_pressure | awk '/free percentage/ {print $NF + 0}')
+  sysctl -n hw.memsize |
+    awk -v free="$free" '{t = $1 / 1073741824; printf " %.1fG/%.1fG\n", t * (100 - free) / 100, t}'
+  ;;
+*)
+  echo "Usage: ${0##*/} ping [host]|cpu|mem" >&2
+  exit 2
+  ;;
+esac

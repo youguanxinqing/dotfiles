@@ -4,6 +4,18 @@ onboarding = false
 # 同时挂 10 个 agent 时，按 space 分组等于要自己扫一遍找哪个在等我。
 agent_panel_sort = "priority"
 
+# 右侧状态区 —— tmux 那条 status-right（powerkit 的 ping/cpu/memory）的对应物。
+# herdr 没有 status bar 插件位（plugin manifest 只有 actions/events/panes），
+# 所以只能走内建的 tab_bar_right，取数在 bin/herdr-status。
+# 这些 command 在 server 侧跑：herdr --remote 时读到的是远端那台机器的数。
+# 窄屏时整块会让位给 tab，不用担心把 tab 挤没。
+tab_bar_right = [
+  { type = "command", command = "~/.local/bin/herdr-status ping", interval_seconds = 15, timeout_seconds = 3 },
+  { type = "command", command = "~/.local/bin/herdr-status cpu", interval_seconds = 5, timeout_seconds = 3 },
+  { type = "command", command = "~/.local/bin/herdr-status mem", interval_seconds = 5, timeout_seconds = 3 },
+]
+tab_bar_right_separator = "  "
+
 # agent 完成的通知不走 herdr：由 Claude Code 的 Stop hook -> bin/agent-done-toast
 # -> g-notify 交给当前平台的桌面后端，herdr 再弹一个是重复。
 # 也试过 delivery = "herdr"（终端内浮层）：样式只能调 accent 和 panel_bg，且切出
