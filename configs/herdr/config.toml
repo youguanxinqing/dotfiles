@@ -206,6 +206,20 @@ type = "plugin_action"
 command = "rmarganti.herdr-pluck.pluck"
 description = "pluck visible token"
 
+# 把旁边 nvim 打开的文件路径贴进 agent 的输入框（不回车，留给你补一句话再发）。
+# pluck 只能抓画面上已经印出来的 token，nvim 的 buffer 不在画面上 ——
+# 得去问它的 RPC socket，细节在 bin/nvim-here。
+# 一个文件直接贴（无任何视觉噪音），多个文件才弹 fzf。
+#
+# 走 plugin_action 而不是 type = "shell"/"popup"：shell 没 tty 给不了 picker，
+# popup 又让单文件那次也闪一下。插件的 action 静默跑、需要选时自己开 popup pane，
+# 声明在 configs/herdr/plugins/local/nvim-here/herdr-plugin.toml。
+[[keys.command]]
+key = "prefix+y"
+type = "plugin_action"
+command = "nvim-here.paste"
+description = "paste nvim's open file into the agent input"
+
 # 跳到下一个 blocked / done 的 agent，连按循环。working / idle 的一律不跳 ——
 # 内建 next_agent 会把它们一起轮进来，挂 10 个的时候要多按好几下。
 [[keys.command]]

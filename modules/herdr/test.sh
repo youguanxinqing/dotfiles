@@ -20,6 +20,8 @@ printf '%s\n' \
   '  [[ "$3" != cinco/herdr-grep-nvim ]]' \
   'elif [[ "$1 $2" == "plugin enable" ]]; then' \
   '  echo "enable $3" >> "$HERDR_TEST_LOG"' \
+  'elif [[ "$1 $2" == "plugin link" ]]; then' \
+  '  echo "link ${3##*/}" >> "$HERDR_TEST_LOG"' \
   'else' \
   '  exit 1' \
   'fi' > "$TEST_BIN/herdr"
@@ -35,6 +37,12 @@ grep -Fqx 'enable heeler' "$TEST_LOG"
 grep -Fqx 'install ntindle/herdr-resurrect' "$TEST_LOG"
 grep -Fqx 'install rmarganti/herdr-pluck' "$TEST_LOG"
 grep -Fqx 'pluck source=1' "$TEST_LOG"
+# 本地插件（manifest 在仓库里）走 plugin link，不是 plugin install。
+grep -Fqx 'link nvim-here' "$TEST_LOG"
+if grep -Fq 'install nvim-here' "$TEST_LOG"; then
+  echo "Herdr tried to install a local plugin from GitHub." >&2
+  exit 1
+fi
 if grep -Fq 'install ZingerLittleBee/Heeler/plugin' "$TEST_LOG"; then
   echo "Herdr reinstalled a disabled plugin instead of enabling it." >&2
   exit 1

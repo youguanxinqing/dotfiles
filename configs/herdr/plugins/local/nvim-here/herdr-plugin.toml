@@ -1,0 +1,33 @@
+# nvim-here: 把旁边 nvim 打开的文件贴进 agent 的输入框。
+#
+# 为什么包成插件，而不是直接写 [[keys.command]]：内建的 type = "shell" 不闪，但
+# 没有 tty，给不了 picker；type = "popup" 能跑 fzf，但单文件那次也要闪一下 popup。
+# 插件两者兼得 —— action 像 shell 一样静默跑，只有真的需要选的时候才
+# `herdr plugin pane open` 一个 popup pane。
+#
+# 命令不写相对路径：插件命令的 cwd 是插件目录、PATH 很干净，而脚本是
+# install.sh 发布到 ~/.local/bin 的（那边是指回仓库的软链，改了就生效）。
+id = "nvim-here"
+name = "nvim-here"
+version = "1.0.0"
+min_herdr_version = "0.7.4"
+description = "Paste the file your neighbouring nvim has open into the agent's input."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "paste"
+title = "Paste nvim's open file"
+description = "One open file goes straight into the agent input; several open a picker."
+contexts = ["pane", "tab", "workspace"]
+command = ["/bin/sh", "-c", "exec \"$HOME/.local/bin/nvim-here\" --send"]
+
+# 只有多文件时才被打开。尺寸给固定行数：百分比在大屏上会撑出一个几乎全空的大框。
+[[panes]]
+id = "pick"
+title = "Pick a file"
+description = "fzf picker over the files the neighbouring nvim panes have open."
+placement = "popup"
+width = "60%"
+height = 12
+command = ["/bin/sh", "-c", "exec \"$HOME/.local/bin/nvim-here\" --pick"]
+

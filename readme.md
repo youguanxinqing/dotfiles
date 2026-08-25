@@ -282,6 +282,14 @@ Herdr's module owns both the command and plugin lifecycle. Exact plugin sources
 and refs live in `modules/herdr/install.sh`; Git-ignored plugin code and runtime
 state stay outside this repository.
 
+Locally authored plugins are the exception: their manifest is ours to keep, so it
+lives in `configs/herdr/plugins/local/<id>/herdr-plugin.toml` and the installer
+runs `herdr plugin link` on it instead of downloading anything. A local plugin
+holds no code — the executable it names ships in `bin/` like any other command.
+Reach for one when a keybinding needs both a silent path and a popup: an action
+runs headless the way `type = "shell"` does, and can open a popup pane of its own
+only when it has something to ask.
+
 ## Fonts
 
 ```bash

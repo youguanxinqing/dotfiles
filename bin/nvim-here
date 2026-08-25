@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+"""把旁边 nvim 正在编辑的文件路径喂给 agent。
+
+herdr 的 pane list 只给 cwd 和终端标题，看不见 nvim 的当前 buffer；生态里
+所有 herdr-*.nvim 也都是「从 nvim 往 agent 推」，没有反过来的。但拿路径本身不需要
+插件：nvim 一启动就在 $TMPDIR/nvim.$USER/*/nvim.<pid>.0 开了 RPC socket，
+远程求值就是答案。（configs/herdr/plugins/local/nvim-here 那个薄插件只为 picker
+要一个 popup pane 而存在，见那边的注释。）
+
+那个 <pid> 是 `nvim --embed` 子进程，不是 herdr 在 pane 里看到的前台进程 ——
+nvim 0.12 把 UI 和 server 拆成两个进程，socket 只挂在 server 那一侧，
+所以按 herdr 给的 pid 直接去 glob 一定找不到，要先往下走一层。
+
+不限定方向，也不只问当前窗口：一个 nvim 分屏开了几个文件就全部返回（当前窗口
+那个排第一），旁边并排几个 nvim pane 就各自问一遍。
+
+用法:
+  nvim-here                # 本 tab 每个 nvim pane 可见的所有文件
+  nvim-here --all          # 换成整个 session
+  nvim-here --send         # 把 @路径 写进 agent 的输入框（不回车）；多个文件时开 picker
+  nvim-here --pick         # picker 本体，由 --send 通过插件 popup 调起，不手工跑
+  nvim-here --self-check   # 自检
+"""
+
+import argparse
+import glob
+import json
+import os
+import subprocess
+import sys
+
+# 插件的 action 和 pane 命令都由长驻的 herdr server 直接 spawn，PATH 很干净。
+os.environ["PATH"] = os.pathsep.join(
+    (
+        os.path.expanduser("~/.local/bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/home/linuxbrew/.linuxbrew/bin",
+        os.environ.get("PATH", ""),
+    )
+)
+
+# nvim 把 socket 放在 macOS 的 $TMPDIR 或 Linux 的 $XDG_RUNTIME_DIR 下，
+# 两个都扫，不存在的那个 glob 自己会空。
+SOCKET_ROOTS = (os.environ.get("TMPDIR", "/tmp"), os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
+
+# 当前窗口的文件排第一，后面跟同一个 tabpage 里其它窗口的（含浮窗，靠 isfile 滤掉）。
+# bufname 是相对 nvim 的 cwd 的，所以在 nvim 那侧就 :p 成绝对路径。
+VISIBLE_FILES = (
+    'expand("%:p") . "\\n" . join(map('
+    "filter(getwininfo(), {_,w -> w.tabnr == tabpagenr()}), "
+    '{_,w -> fnamemodify(bufname(w.bufnr), ":p")}), "\\n")'
+)
+
+
+def herdr(*args):
+    out = subprocess.run(("herdr",) + args, capture_output=True, text=True, check=True).stdout.strip()
+    # send-text 这类命令成功时 stdout 是空的，别拿去 json.loads。
+    if not out:
+        return {}
+    payload = json.loads(out)
+    # protocol 不匹配这类错误是 exit 0 + error JSON（herdr-tab-jump 也踩过），
+    # check=True 拦不住，得自己看一眼。
+    if "error" in payload:
+        raise RuntimeError((payload["error"] or {}).get("message") or out)
+    return payload["result"]
+
+
+def process_tree():
+    """ppid -> [pid]"""
+    out = subprocess.run(("ps", "-ax", "-o", "pid=,ppid="), capture_output=True, text=True).stdout
+    tree = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            tree.setdefault(int(parts[1]), []).append(int(parts[0]))
+    return tree
+
+
+def nvim_socket(ui_pid, tree):
+    user = os.environ.get("USER", "")
+    for pid in [ui_pid] + tree.get(ui_pid, []):
+        for root in SOCKET_ROOTS:
+            hit = glob.glob(os.path.join(root, "nvim.%s" % user, "*", "nvim.%d.0" % pid))
+            if hit:
+                return hit[0]
+    return None
+
+
+def visible_files(sock):
+    """([绝对路径], 拿不到时的原因)。原因一定要带出来 —— 「找不到 nvim」和
+    「nvim 停在开屏 dashboard 上」是两件事，只报前者会让人以为脚本坏了。"""
+    try:
+        done = subprocess.run(
+            # --headless + stdin 断开 tty：否则 nvim 会当自己要开 TUI，往 stdout 吐
+            # \e[?1049h、\e[?2026$p 这一串，把求值结果埋在转义序列里；那些查询还会
+            # 打到 pane 的 tty 上，回复漏进 shell，屏幕上就是一堆 ^[[?69;2$y。
+            ("nvim", "--headless", "--server", sock, "--remote-expr", VISIBLE_FILES),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return [], "no answer in 3s (nvim busy or stuck on a hit-enter prompt)"
+    if done.returncode != 0:
+        return [], (done.stderr.strip().splitlines() or ["--remote-expr failed"])[-1]
+
+    files, seen = [], set()
+    for line in done.stdout.splitlines():
+        path = line.strip()
+        # isfile 而不是 exists: 无名 buffer 的 :p 会退化成 nvim 的 cwd（一个目录），
+        # term:// buffer 也会被拼成不存在的路径，两种都不该报给 agent。
+        if not path or not os.path.isfile(path):
+            continue
+        # 按 realpath 去重、但输出 nvim 给的那个写法：当前窗口走 expand("%:p")（nvim
+        # 会解 symlink，/var -> /private/var），别的窗口走 bufname 原样，同一个文件
+        # 会有两种拼法。给 agent 的路径保持 nvim 显示的样子，别替人 resolve。
+        key = os.path.realpath(path)
+        if key not in seen:
+            seen.add(key)
+            files.append(path)
+    if not files:
+        return [], "no file in any visible window (dashboard or scratch buffer)"
+    return files, ""
+
+
+def nvim_files(panes, tree):
+    """([(pane, 绝对路径)], [(pane_id, 跳过原因)])，一个 pane 可能出现多次。"""
+    found, skipped = [], []
+    for pane in panes:
+        info = herdr("pane", "process-info", "--pane", pane["pane_id"])["process_info"]
+        pid = next((p["pid"] for p in info["foreground_processes"] if p["argv0"] == "nvim"), None)
+        if pid is None:
+            continue  # 不是 nvim pane，没什么要解释的
+        sock = nvim_socket(pid, tree)
+        if sock is None:
+            skipped.append((pane["pane_id"], "no RPC socket for pid %d (still starting up?)" % pid))
+            continue
+        files, why = visible_files(sock)
+        if not files:
+            skipped.append((pane["pane_id"], why))
+        found.extend((pane, path) for path in files)
+    return found, skipped
+
+
+def bail(message, scanned=None, skipped=()):
+    for pane_id, why in skipped:
+        print("  %s: %s" % (pane_id, why), file=sys.stderr)
+    if scanned is not None and not skipped:
+        print("  scanned %d pane(s), none running nvim" % scanned, file=sys.stderr)
+    print(message, file=sys.stderr)
+    # popup 里的 stderr 会随 popup 一起消失，留一下让人读完（同 herdr-tab-jump）。
+    if sys.stdout.isatty():
+        try:
+            input("press enter to close ")
+        except (EOFError, KeyboardInterrupt):
+            pass
+    sys.exit(1)
+
+
+def relative(path, base):
+    # agent 的 @ 补全认相对 cwd 的路径；不在 cwd 底下就退回绝对路径。
+    rel = os.path.relpath(path, base)
+    return path if rel.startswith("..") else rel
+
+
+def paste(pane_id, picks):
+    herdr("pane", "send-text", pane_id, " ".join("@" + path for path in picks) + " ")
+
+
+def pick(options):
+    """fzf 选一个（tab 键可多选）；esc 返回空。fzf 已经装了，画列表不值得再写一遍。
+    fzf 自己打开 /dev/tty 画界面，所以列表照常从 stdin 喂进去。"""
+    done = subprocess.run(
+        (
+            "fzf",
+            "--prompt=@ ",
+            "--multi",
+            "--header=enter: paste   tab: pick several   esc: cancel",
+        ),
+        input="\n".join(options),
+        capture_output=True,
+        text=True,
+    )
+    return [line for line in done.stdout.splitlines() if line.strip()]
+
+
+def caller():
+    """(tab_id, focused_pane_id)。作为 plugin action 跑时 herdr 直接把用户所在的
+    pane/tab 喂在 HERDR_PLUGIN_CONTEXT_JSON 里（实测 invocation_source=cli 也有），
+    比 pane list 的 focused 靠得住 —— 那个可能指向 popup 自己。手工跑时退回 layout。"""
+    raw = os.environ.get("HERDR_PLUGIN_CONTEXT_JSON")
+    if raw:
+        ctx = json.loads(raw)
+        return ctx.get("tab_id"), ctx.get("focused_pane_id")
+    layout = herdr("pane", "layout", "--current")["layout"]
+    return layout.get("tab_id"), layout.get("focused_pane_id")
+
+
+def send(panes):
+    tab, here = caller()
+    if tab is None:
+        sys.exit("nvim-here: no caller context (run this from inside herdr)")
+    scope = [p for p in panes if p["tab_id"] == tab]
+
+    # 键一般在 agent pane 里按；在 nvim 那半边按下时退到同 tab 的第一个 agent pane，
+    # 省掉一次「按错地方没反应」。
+    target = next((p for p in scope if p["pane_id"] == here and p.get("agent")), None) or next(
+        (p for p in scope if p.get("agent")), None
+    )
+    if target is None:
+        bail("nvim-here: no agent pane in this tab")
+
+    hits, skipped = nvim_files(scope, process_tree())
+    if not hits:
+        bail("nvim-here: no nvim with a file open in this tab", len(scope), skipped)
+
+    base = target.get("foreground_cwd") or target["cwd"]
+    # 跨 pane 去重：同一个文件在两个 nvim 里开着是一个选择，不是两个。
+    picks, seen = [], set()
+    for _, path in hits:
+        rel = relative(path, base)
+        if rel not in seen:
+            seen.add(rel)
+            picks.append(rel)
+
+    if len(picks) == 1:
+        paste(target["pane_id"], picks)
+        return
+    # 只有真要选的时候才开 popup（fzf 要 tty）—— 单文件那次一点视觉噪音都没有。
+    # 列表和目标 pane 直接用 --env 交过去，popup 里不用重新问一遍 nvim。
+    herdr(
+        "plugin", "pane", "open",
+        "--plugin", "nvim-here",
+        "--entrypoint", "pick",
+        "--env", "NVIM_HERE_PICKS=" + json.dumps(picks),
+        "--env", "NVIM_HERE_TARGET=" + target["pane_id"],
+        "--focus",
+    )
+
+
+def pick_and_paste():
+    """在插件 popup 里跑：--send 已经把候选列表和目标 pane 用 env 交过来了。"""
+    picks = json.loads(os.environ.get("NVIM_HERE_PICKS") or "[]")
+    target = os.environ.get("NVIM_HERE_TARGET") or ""
+    if not picks or not target:
+        sys.exit("nvim-here: --pick is opened by --send, not run by hand")
+    chosen = pick(picks)
+    if chosen:
+        paste(target, chosen)
+
+
+def self_check():
+    # 只有自检用得上，留在函数里：--send 是按键路径，import 少一点少一点冷启动。
+    import pty
+    import tempfile
+    import time
+
+    assert relative("/a/b/c.go", "/a") == "b/c.go"
+    assert relative("/x/c.go", "/a") == "/x/c.go"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        one, two = os.path.join(tmp, "one.txt"), os.path.join(tmp, "two.txt")
+        for path in (one, two):
+            with open(path, "w") as handle:
+                handle.write("probe\n")
+        # --clean: 不读用户配置，自检不受 lazy.nvim 启动时间和插件报错影响。
+        # 竖切开两个窗口，光标停在 one.txt 上 —— 验证「多文件 + 当前窗口排第一」。
+        proc = subprocess.Popen(
+            ("nvim", "--clean", "--headless", "-c", "vsplit %s" % two, "-c", "wincmd p", one),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            sock = None
+            for _ in range(50):
+                sock = nvim_socket(proc.pid, process_tree())
+                if sock:
+                    break
+                time.sleep(0.1)
+            assert sock, "no socket appeared for the headless nvim"
+
+            files, why = visible_files(sock)
+            real = [os.path.realpath(f) for f in files]
+            assert real == [os.path.realpath(one), os.path.realpath(two)], "got %r (%s)" % (files, why)
+
+            # 回归测试：stdin 是 tty 时 nvim 会自己开 TUI，把转义序列混进求值结果。
+            # visible_files 必须自己把 stdin 断掉，不能依赖调用方。
+            master, slave = pty.openpty()
+            saved = os.dup(0)
+            try:
+                os.dup2(slave, 0)
+                files, why = visible_files(sock)
+            finally:
+                os.dup2(saved, 0)
+                for fd in (saved, master, slave):
+                    os.close(fd)
+            assert [os.path.realpath(f) for f in files] == real, (
+                "tty stdin leaked into the result: %r (%s)" % (files, why)
+            )
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
+
+    print("nvim-here self-check passed")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Show the files each neighbouring nvim has open.")
+    parser.add_argument("--all", action="store_true", help="every nvim in the session, not just this tab")
+    parser.add_argument("--send", action="store_true", help="paste @path into the agent's input, without submitting")
+    parser.add_argument("--pick", action="store_true", help=argparse.SUPPRESS)  # 由 --send 打开的 popup 调用
+    parser.add_argument("--self-check", action="store_true", help="run the built-in self-test and exit")
+    args = parser.parse_args()
+
+    if args.self_check:
+        return self_check()
+    if args.pick:
+        return pick_and_paste()
+
+    panes = herdr("pane", "list")["panes"]
+    if args.send:
+        return send(panes)
+
+    # 从 agent pane 里跑的时候 HERDR_TAB_ID 就是自己那个 tab；从别处跑就跟着焦点走。
+    focused = next((p for p in panes if p.get("focused")), None)
+    tab = os.environ.get("HERDR_TAB_ID") or (focused or {}).get("tab_id")
+    scope = panes if args.all else [p for p in panes if p["tab_id"] == tab]
+    hits, skipped = nvim_files(scope, process_tree())
+    if not hits:
+        bail(
+            "nvim-here: no nvim with a file open%s" % ("" if args.all else " in this tab (try --all)"),
+            len(scope),
+            skipped,
+        )
+    for pane, path in hits:
+        print("%s\t%s" % (pane["pane_id"], path))
+
+
+if __name__ == "__main__":
+    main()
