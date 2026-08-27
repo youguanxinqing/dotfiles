@@ -201,19 +201,13 @@ description = "reload config and renumber tabs"
 
 # herdr-scratch: 浮空 scratchpad，nvim toggleterm 的等价物。shell 活在插件私有的
 # herdr-scratch session 里，prefix+q 收起来只是脱离浮层，进程和滚动历史都还在，
-# 再按 prefix+g 原样回来。默认 workspace 作用域，每个 workspace 一个自己的 scratchpad。
+# 再按 prefix+p 原样回来。默认 workspace 作用域，每个 workspace 一个自己的 scratchpad。
 # 内建的 type = "popup" 做不到这个：命令退出即销毁。
 [[keys.command]]
 key = "prefix+p"
 type = "plugin_action"
 command = "herdr.scratch.toggle"
 description = "toggle scratchpad"
-
-[[keys.command]]
-key = "prefix+g"
-type = "plugin_action"
-command = "herdr.scratch.lazygit"
-description = "toggle lazygit scratchpad"
 
 # Pluck: 镜像当前可见画面，给路径、URL、SHA、IP 等 token 标短 hint，选中即复制。
 # 上游示例的 prefix+q 已被 pane picker 使用，复用 Talon 腾出的 prefix+space。

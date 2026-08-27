@@ -62,7 +62,6 @@ btop
 btm
 watch
 ctop
-lazygit
 lazydocker
 k9s
 
@@ -85,3 +84,7 @@ overmind
 
 # 故意不加 rg: 那个 pane 跑的是 `some-log-cmd | rg -v ...` 这类管道，
 # 而快照只抓到管道的最后一节。单独恢复 rg 会挂在那儿等 stdin，比不恢复更糟。
+
+# 故意不加 lazygit: 恢复出来的 lazygit 是个纯轮询 git 状态的 TUI，
+# pane 脱离后不退，攒几天就是几个满载空转的进程（2026-08-27 清掉过 6 个，
+# 合计约 3 小时 CPU）。要看 git 走 prefix+p 的 scratchpad 手动开。
