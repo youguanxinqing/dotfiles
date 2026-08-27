@@ -270,6 +270,17 @@ type = "shell"
 command = '"${HOME}/.local/bin/herdr-agent-attention"'
 description = "jump to next blocked or done agent"
 
+# tmux 那条 bind i 的对应物：把当前 pane 的位置拷进剪贴板，粘进对话告诉 AI 操作
+# 哪个 pane。拷的是 pane_id（pane read / send-text / agent focus 认的都是它），
+# 附一句 herdr --skill 让没接触过 herdr 的 AI 自己拿操作说明，dotfiles 不用再养一个 skill。
+# 不占 prefix+i —— 它被上面 smart-tab 的 i（前插 tab）拿着，i/a/I/A 一套 vim 助记
+# 不值得拆；挪到 alt 层保住 i 的助记。确认弹窗走 g-notify，herdr 自己的 toast 关着（见 [ui.toast]）。
+[[keys.command]]
+key = "prefix+alt+i"
+type = "shell"
+command = 'printf "herdr_location: %s (herdr pane_id; control it via the herdr CLI, see: herdr --skill)" "$HERDR_ACTIVE_PANE_ID" | "${HOME}/.local/bin/g-copy" && "${HOME}/.local/bin/g-notify" --title "Copied" --message "herdr_location: $HERDR_ACTIVE_PANE_ID"'
+description = "copy pane location for AI"
+
 # agents 面板的 workspace 名默认恒定加粗（sidebar.rs 里未选中分支也 add_modifier(BOLD)），
 # spaces 面板未选中行则不加粗，两个面板看起来不是一套东西。去掉粗体对齐 spaces。
 # 代价：当前活跃的那行也不再加粗，靠背景高亮 + 更亮的前景色区分。
