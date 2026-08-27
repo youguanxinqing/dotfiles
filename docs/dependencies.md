@@ -25,6 +25,16 @@ The fix is `modules/herdr/install.sh`, using the module's `script` dependency
 and implementing `check` / `install` / `clean`. Follow that pattern for
 anything else where config points outside the repo.
 
+## Our own plugin: dev link on this machine, GitHub everywhere else
+
+`youguanxinqing.herdr-flash` (bound to `prefix+s`) is developed in
+`~/Projects/herdr-pluck-flash` and `herdr plugin link`ed from there on this
+machine, so `herdr plugin list` shows `[local:...]` instead of a GitHub ref.
+`modules/herdr/install.sh` still declares it in `PLUGINS` so a new machine
+installs it from GitHub (no tag published yet, so it tracks `main`), and it
+treats an enabled `[local:]` line as satisfied so a rerun here never replaces
+the dev link with a GitHub install.
+
 ## A platform can need a native integration, not just a different package
 
 Fish is the example. macOS can use the shared Homebrew adapter, while Linux

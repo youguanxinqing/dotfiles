@@ -66,6 +66,10 @@ last_pane = "ctrl+alt+o"
 # 数字看不见，得自己数行；同 tab 内的 pane 用 prefix+q 那个带列表的更省事。
 focus_agent = "prefix+alt+1..9"
 
+# flash（下面的 youguanxinqing.herdr-flash）拿走了 settings 的默认键 prefix+s，settings 挪到 t ——
+# t 原来的 navigator 接住 flash 腾出的 /，三个键正好换了一圈。
+settings = "prefix+t"
+
 # detach 从 prefix+q 挪到 prefix+d（tmux 本来就是 prefix+d），把 prefix+q 让给
 # 下面那个 display-panes 等价物 —— 保住 tmux 的肌肉记忆。
 detach = "prefix+d"
@@ -76,10 +80,11 @@ detach = "prefix+d"
 new_tab = ""
 close_tab = ""
 
-# herdr-navigator: prefix+t 开 fuzzy navigator，prefix+shift+L 跳回上一个 workspace。
-# 避开了默认占用的 prefix+shift+t (rename_tab) 和 prefix+l (focus_pane_right)。
+# herdr-navigator: prefix+/ 开 fuzzy navigator，prefix+shift+L 跳回上一个 workspace。
+# 原来在 prefix+t，让给了 settings（settings 的 s 被 flash 拿走）；/ 是 flash 腾出来的，
+# 模糊查找配 / 也顺。prefix+shift+L 避开默认占用的 prefix+l (focus_pane_right)。
 [[keys.command]]
-key = "prefix+t"
+key = "prefix+/"
 type = "plugin_action"
 command = "herdr-navigator.open"
 description = "jump to anything"
@@ -217,6 +222,31 @@ key = "prefix+space"
 type = "plugin_action"
 command = "rmarganti.herdr-pluck.pluck"
 description = "pluck visible token"
+
+# 增量搜索 + 选区（flash.nvim 的路子）：打字缩小范围 → 按标签把光标落到那次命中的
+# 第一个字符上 → v 起选区、hjkl/wbe/t/f 拉、y 复制、bksp 回搜索。
+# y 复制后不退（回到空搜索，esc 才退）—— 插件配置 plugins/config/youguanxinqing.herdr-flash/
+# config.toml 里 exit_on_yank = false，默认是复制即退。
+# 高亮和落点都只覆盖你打的那几个字，不外扩到「所在的词」：搜索负责「去哪」，
+# 「取多少」是手动的，和 pluck 的「帮你选好整个 token」正好相反。
+# 上游 pluck 没有这个 action，拆成了自己的插件（github.com/youguanxinqing/herdr-flash）。
+# 本机 plugin link 到 ~/Projects/herdr-pluck-flash 便于改代码；新机器由
+# modules/herdr/install.sh 从 GitHub 装，无 tag，跟 main。
+#
+# 为什么不是真的进 herdr 的 copy mode：copy mode 是 herdr 输入分发器里的一个 key
+# action，socket API 的 117 个方法里没有它，也没有「触发某个键位动作」的口子
+# （pane.send_keys 是往 PTY 里写，到不了 herdr 自己的 UI）。所以选区这一步只能
+# 在插件的浮层里自己做——浮层本来就是整屏镜像，够用。
+# 代价：它读的是按键那一刻的快照，翻不了 scrollback。
+#
+# prefix+s：settings 的默认键，settings 挪去了 prefix+t（见上面 [keys]）。
+# 和 prefix+space 的分工：知道要什么形状的东西（SHA、URL）用 pluck，
+# 知道要什么内容但不知道形状、或者要的不止一个 token，用这个。
+[[keys.command]]
+key = "prefix+s"
+type = "plugin_action"
+command = "youguanxinqing.herdr-flash.flash"
+description = "flash: search visible text, then select and yank"
 
 # 把旁边 nvim 打开的文件路径贴进 agent 的输入框（不回车，留给你补一句话再发）。
 # pluck 只能抓画面上已经印出来的 token，nvim 的 buffer 不在画面上 ——

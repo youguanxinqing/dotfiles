@@ -24,10 +24,11 @@ persiyanov/herdr-reviewr|v0.29.0|persiyanov.reviewr
 AkashJana18/herdr-scratch|main|herdr.scratch
 ntindle/herdr-resurrect|main|ntindle.herdr-resurrect
 rmarganti/herdr-pluck|v0.3.1|rmarganti.herdr-pluck
+youguanxinqing/herdr-flash|main|youguanxinqing.herdr-flash
 '
 # 关于上面的 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
 # main 已经跑在 v1.0.1 tag 前面了 —— 写 v1.0.1 反而会把新机器装回更旧的代码。
-# resurrect 没发过 tag，所以只能跟 main。
+# resurrect 和 herdr-flash 都没发过 tag，只能跟 main。
 
 # 本地插件：manifest 就在仓库里，用 plugin link 指过去而不是从 GitHub 装 ——
 # nvim-here 的可执行文件是 bin/ 那份（modules/bin 已经链到 ~/.local/bin），
@@ -59,6 +60,14 @@ FAILED=""
 apply_plugin() {
   local spec="$1" ref="$2" id="$3" line
   line="$(printf '%s\n' "$PLUGIN_LIST" | grep -F -m 1 -- "- $id (" || true)"
+
+  # herdr-flash 在开发机上是 plugin link 到源码仓库的（改代码不用重装，见
+  # docs/dependencies.md）。local 链接视为已满足：check 不红，install 也不会
+  # 把 dev link 顶掉换成 GitHub 安装。clean 不豁免，照常卸。
+  if [[ "$ACTION" != clean && "$line" == *" enabled "* && "$line" == *"[local:"* ]]; then
+    [[ "$ACTION" != install ]] || echo "Already linked (dev): $id"
+    return 0
+  fi
 
   case "$ACTION" in
     check)
