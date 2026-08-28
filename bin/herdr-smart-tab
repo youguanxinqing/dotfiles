@@ -21,12 +21,12 @@
 set -euo pipefail
 
 usage() {
-  printf 'usage: herdr-smart-tab <before|after|first|last|plain|close-tab|close-pane|renumber|renumber-all>\n' >&2
+  printf 'usage: herdr-smart-tab <before|after|first|last|plain|close-tab|close-pane|renumber|renumber-positions|renumber-all>\n' >&2
 }
 
 mode="${1:-}"
 case "$mode" in
-  before | after | first | last | plain | close-tab | close-pane | renumber | renumber-all) ;;
+  before | after | first | last | plain | close-tab | close-pane | renumber | renumber-positions | renumber-all) ;;
   *)
     usage
     exit 2
@@ -69,7 +69,7 @@ case "$mode" in
     ;;
 esac
 case "$mode" in
-  close-tab | renumber | renumber-all) ;;
+  close-tab | renumber | renumber-positions | renumber-all) ;;
   close-pane)
     [ -n "$requested_pane_id" ] || die "active pane is unavailable"
     ;;
@@ -248,6 +248,14 @@ renumber_all_groups() {
 
 if [ "$mode" = "renumber" ]; then
   renumber_all_groups
+  renumber_all
+  exit 0
+fi
+
+# 只补位置前缀，跳过同名分组那一步。分组要按每个组重查一遍 tab 列表、每个 label
+# 再起一个 jq —— 4 个 tab 就是 20 多个进程，实测占 renumber 全程的八成。刚由布局
+# 建出来的 workspace 里 tab 名本来各不相同，那一步没有任何东西可编。
+if [ "$mode" = "renumber-positions" ]; then
   renumber_all
   exit 0
 fi
