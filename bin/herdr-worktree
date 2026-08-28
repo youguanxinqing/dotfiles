@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+#
+# 一个 fzf 对话框同时管开和建 worktree：输入既是过滤词又是新分支名，回车打开选中的
+# （已经开着就跳过去）或按输入建一个，ctrl-d 删。建完/开完把 bm 的布局贴进 herdr
+# 刚建的那个 workspace 里。
+#
+# 为什么不用 herdr 内建的 new_worktree/open_worktree：那是两个键两个弹窗，而且新
+# workspace 只有一个光 shell tab —— 布局、fetch 起点都得自己再补。软链和目录那部分
+# 不在这里，归 worktree-links 插件（挂在 worktree.created 事件上），所以从内建键或
+# agent 手里冒出来的 worktree 一样有软链，只是没有布局。建在哪读的是同一份清单里的
+# `worktree_dir` 一行。
+#
+# 分支不删：ctrl-d 只摘掉 checkout（开着的经 herdr 关 workspace，没开的走 git），
+# 分支还在，删错了 `git worktree add` 回来就是。
+#
+# usage: herdr-worktree                  interactive dialog
+#        herdr-worktree create <branch>
+#        herdr-worktree open <branch>
+set -euo pipefail
+
+# 弹窗和插件命令的 PATH 都不可靠，把常见位置接在后面（fish 是给 bm 用的）。
+# 接在后面而不是前面：调用方给的 PATH 说话更算数（测试就靠这个塞 stub）。
+PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+self="${BASH_SOURCE[0]}"
+me="${0##*/}"
+
+mode='dialog'
+case "${1:-}" in
+  create | open)
+    [ "$#" -ge 2 ] || { echo "$me: $1 needs a branch name" >&2; exit 2; }
+    mode="$1"
+    ;;
+  # fzf 用的内部子命令。真正的处理在 load/rows 定义之后 —— 它自己要算列表。
+  __list) mode='__list' ;;
+  -h | --help)
+    sed -n '/^# usage:/,/^#        herdr-worktree open/p' "$self" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+  '') ;;
+  *) echo "$me: unknown command '$1'" >&2; exit 2 ;;
+esac
+requested="${2:-}"
+
+herdr="${HERDR_BIN_PATH:-herdr}"
+command -v "$herdr" >/dev/null 2>&1 || { echo "$me: herdr is unavailable" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "$me: jq is required" >&2; exit 1; }
+
+fail() {
+  printf '%s: %s\n' "$me" "$1" >&2
+  # 弹窗退出即销毁，不停一下的话报错根本来不及看。
+  [ ! -t 0 ] || read -r -n 1 -s -p 'press any key…' || true
+  exit 1
+}
+
+cwd="${HERDR_ACTIVE_PANE_CWD:-}"
+# __list 的 cwd 由调用方用 $4 给死，不必为了推它再 exec 一次 herdr
+if [ -z "$cwd" ] && [ "$mode" != '__list' ]; then
+  cwd="$("$herdr" pane current 2>/dev/null | jq -r '.result.pane.cwd // empty' || true)"
+fi
+[ -n "$cwd" ] || cwd="$PWD"
+repo_root=''
+
+# 一律换算到主 checkout：herdr 拒绝从 linked worktree 里开/建 worktree
+# （linked_worktree_source: "New and open worktree actions start from the repo
+# parent workspace."），而按这个键的时候人通常正待在某个 worktree 里。
+# --show-toplevel 在 worktree 里给的是那个 worktree 自己，只有 --git-common-dir
+# 指得回主 checkout 的 .git。
+#
+# 常见的两种形状直接读盘，不 exec git：主 checkout 的 .git 是目录；linked worktree 的
+# .git 是个文件，内容就一行 "gitdir: <主 checkout>/.git/worktrees/<名字>"（gitfile，
+# git 2.5 起的格式）。read 是内建，一个进程都不起。
+# 为什么值得手读：popup 是个冷 pane，里面 exec 一次 git 要 85ms（热 shell 里 3.9ms）；
+# 而且不算出主 checkout 就得把 linked worktree 传给 herdr，它会自己再 resolve 一遍 ——
+# 实测 --cwd 给 worktree 是 88ms，给主 checkout 是 48ms。
+# 形状不认得就退回 git rev-parse，正确性归它：裸仓库、submodule 的 .git/modules/、
+# 相对路径的 gitdir（git 2.48 的 --relative-paths）、GIT_DIR 覆盖，都走那条。
+resolve_repo_root() {
+  local d="$cwd" line common
+  while [ -n "$d" ] && [ "$d" != '/' ]; do
+    if [ -d "$d/.git" ]; then
+      repo_root="$d"
+      return 0
+    fi
+    if [ -f "$d/.git" ]; then
+      read -r line <"$d/.git" || line=''
+      case "$line" in
+        'gitdir: /'*/.git/worktrees/*)
+          line="${line#gitdir: }"
+          repo_root="${line%/.git/worktrees/*}"
+          return 0
+          ;;
+      esac
+      break
+    fi
+    d="${d%/*}"
+  done
+  common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  [ -n "$common" ] || fail "not inside a git repository: $cwd"
+  case "$common" in
+    */.git) repo_root="${common%/.git}" ;;
+    *) repo_root="$common" ;; # 裸仓库：--git-common-dir 就是仓库本身
+  esac
+}
+
+branches=()
+paths=()
+open_ids=()
+count=0
+width=6
+
+load() {
+  local tsv len i
+  branches=(); paths=(); open_ids=(); count=0; width=6
+  # 没算过 repo_root 就直接拿 $cwd：herdr 从 linked worktree 一样列得全（response
+  # 里的 source.repo_root 就是主 checkout），省掉开画前那次 git。
+  # herdr 和 jq 串成一条管子而不是先存 json 再喂：两个 exec 就重叠了，jq 的启动
+  # 开销藏进 herdr 等 socket 的那 48ms 里。popup 里 exec 一个命令要 30ms+，白捡的。
+  # 不写成 < <(herdr | jq)：那样 herdr 挂了没人报错，只会静默出一份空列表；
+  # 走一次命令替换才能靠 pipefail 拿到失败。
+  tsv="$("$herdr" worktree list --cwd "${repo_root:-$cwd}" | jq -r \
+    '.result.worktrees[] | select(.is_linked_worktree)
+     | [(.branch // .label), .path, (.open_workspace_id // "")] | @tsv')" ||
+    fail "could not list worktrees"
+  while IFS=$'\t' read -r b p o; do
+    [ -n "$p" ] || continue
+    branches+=("$b"); paths+=("$p"); open_ids+=("$o")
+  done <<<"$tsv"
+  count="${#paths[@]}"
+  for ((i = 0; i < count; i++)); do
+    len="${#branches[$i]}"
+    [ -z "${open_ids[$i]}" ] || len=$((len + 7))
+    [ "$len" -le "$width" ] || width="$len"
+  done
+}
+
+# 新 worktree 建在哪由主 checkout 根目录的 .worktree-links 说：`worktree_dir <path>`，
+# 相对主 checkout，或绝对路径。原来是取现有 worktree 父目录的众数，问题是第一个
+# worktree 落在哪没有任何输入能控制，而它又会成为之后所有 worktree 的众数种子 ——
+# 一个仓库的 worktree 位置就这么被第一次那下定死了。
+# 没写 worktree_dir（或没有清单）就不传 --path，落到 herdr 自己的 ~/.herdr/worktrees。
+# 相对路径不展平，传出去是 <主 checkout>/../wts/<branch>：git worktree add 存的是
+# 解析过的绝对路径，之后 herdr worktree list 给回来的就是干净的。
+worktree_dir() {
+  local manifest="$repo_root/.worktree-links" verb rel _rest
+  [ -f "$manifest" ] || return 0
+  while read -r verb rel _rest || [ -n "$verb" ]; do
+    [ "$verb" = worktree_dir ] && [ -n "$rel" ] || continue
+    case "$rel" in
+      /*) printf '%s' "$rel" ;;
+      *) printf '%s/%s' "$repo_root" "$rel" ;;
+    esac
+    return 0
+  done <"$manifest"
+}
+
+# 起点用 origin/HEAD 而不是本地默认分支：本地那条没人 checkout，会一直停在旧 commit。
+base_ref() {
+  local ref
+  [ -n "$(git -C "$repo_root" remote 2>/dev/null)" ] || return 0
+  ref="$(git -C "$repo_root" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  [ -n "$ref" ] || ref='origin/master'
+  git -C "$repo_root" rev-parse --verify --quiet "$ref" >/dev/null || return 0
+  printf '%s' "$ref"
+}
+
+# bm 从 cwd 推 root/session，所以必须 cd 过去。HERDR_WORKSPACE_ID 必须显式给：不给的话
+# bootmux --append 会静默贴到「当前聚焦的那个 workspace」上，实测把 4 个 tab 贴进了别人
+# 的工作区，而 bootmux stop 认不出 append 出来的东西、删不掉，只能一个个 tab close。
+apply_layout() {
+  local ws="$1" initial_tab="$2" path="$3" tabs list keep
+  command -v fish >/dev/null 2>&1 || return 0
+  if ! (cd "$path" && HERDR_WORKSPACE_ID="$ws" HERDR_ACTIVE_WORKSPACE_ID="$ws" \
+    fish -c 'bm --append --no-attach' >/dev/null 2>&1); then
+    # 布局没贴上不算失败：worktree 已经建好也补过软链了，留一个单 tab 的 workspace
+    # 比整个操作报错回滚有用。
+    printf '%s: the bootmux layout could not be applied\n' "$me" >&2
+    return 0
+  fi
+  list="$("$herdr" tab list --workspace "$ws")"
+  tabs="$(jq -r '.result.tabs | length' <<<"$list")"
+  [ "${tabs:-0}" -le 1 ] || "$herdr" tab close "$initial_tab" >/dev/null 2>&1 || true
+  # 不用 renumber-all（遍历所有 workspace，实测 2.5s），也不用 renumber（还要跑一遍
+  # 同名分组编号，每组重查一次 tab 列表 + 每个 label 一个 jq，1.1s）。布局刚建出来的
+  # tab 名本来各不相同，只有位置前缀需要补 —— renumber-positions 就是那一步。
+  # 传一个还活着的 tab：renumber 只在入口守卫里用它，但给个刚被 close 掉的 id 太脆。
+  keep="$(jq -r --arg drop "$initial_tab" \
+    '[.result.tabs[] | select(.tab_id != $drop)][0].tab_id // empty' <<<"$list")"
+  HERDR_ACTIVE_WORKSPACE_ID="$ws" HERDR_ACTIVE_TAB_ID="${keep:-$initial_tab}" \
+    herdr-smart-tab renumber-positions >/dev/null 2>&1 || true
+}
+
+open_at() {
+  local path="$1" branch="$2" res
+  res="$("$herdr" worktree open --cwd "$repo_root" --path "$path" --focus)" ||
+    fail "could not open $branch"
+  [ "$(jq -r '.result.already_open' <<<"$res")" != 'true' ] || return 0
+  apply_layout \
+    "$(jq -er '.result.workspace.workspace_id' <<<"$res")" \
+    "$(jq -er '.result.workspace.active_tab_id' <<<"$res")" \
+    "$(jq -er '.result.worktree.path' <<<"$res")"
+}
+
+create() {
+  local branch="$1" args res base dir
+  args=(worktree create --cwd "$repo_root" --focus)
+  if [ -n "$branch" ]; then
+    args+=(--branch "$branch")
+    dir="$(worktree_dir)"
+    [ -z "$dir" ] || args+=(--path "$dir/$branch")
+  fi
+  base="$(base_ref)"
+  if [ -n "$base" ]; then
+    # herdr 不 fetch，起点是本地那份 remote ref，不 fetch 就是照着上次的旧 commit 开分支。
+    git -C "$repo_root" fetch "${base%%/*}" "${base#*/}" >/dev/null 2>&1 || true
+    args+=(--base "$base")
+  fi
+  res="$("$herdr" "${args[@]}")" || fail "could not create worktree${branch:+ $branch}"
+  apply_layout \
+    "$(jq -er '.result.workspace.workspace_id' <<<"$res")" \
+    "$(jq -er '.result.workspace.active_tab_id' <<<"$res")" \
+    "$(jq -er '.result.worktree.path' <<<"$res")"
+}
+
+ask() {
+  local answer=''
+  printf '%s [y/N] ' "$1"
+  IFS= read -r -n 1 answer || true
+  printf '\n'
+  case "$answer" in y | Y) return 0 ;; *) return 1 ;; esac
+}
+
+# 开着的 worktree 经 herdr 摘（它要先关掉 workspace），没开的直接走 git。
+# 不带 force 的 git 会拒绝脏 worktree，这是想要的：先问一句再强删。
+remove_at() {
+  local path="$1" ws="$2" force="${3:-}" args
+  if [ -n "$ws" ]; then
+    args=(worktree remove --workspace "$ws")
+    [ -z "$force" ] || args+=(--force)
+    "$herdr" "${args[@]}" >/dev/null 2>&1
+  else
+    args=(worktree remove)
+    [ -z "$force" ] || args+=(--force)
+    git -C "$repo_root" "${args[@]}" "$path" >/dev/null 2>&1
+  fi
+}
+
+confirm_remove() {
+  local path="$1" ws="$2" branch="$3"
+  ask "remove worktree \"$branch\" (the branch is kept)?" || return 0
+  remove_at "$path" "$ws" && return 0
+  ask "\"$branch\" is dirty or locked — force?" || return 0
+  remove_at "$path" "$ws" force ||
+    { printf 'could not remove %s\n' "$branch"; read -r -n 1 -s || true; }
+}
+
+# 每行把真路径、open 的 workspace、原始分支名都带着走（--with-nth 1,2 只显示前两列）：
+# 选完直接用行里的，不按下标回查数组 —— 数组在后台那个子 shell 里，parent 手上没有；
+# 就算重新 load 一份，等 fzf 返回时下标也可能已经指向另一批数据，那会删错 worktree。
+rows() {
+  local i marker
+  for ((i = 0; i < count; i++)); do
+    marker=''
+    [ -z "${open_ids[$i]}" ] || marker=' (open)'
+    printf '%-*s\t%s\t%s\t%s\t%s\n' "$width" "${branches[$i]}$marker" \
+      "${paths[$i]/#$HOME/\~}" "${paths[$i]}" "${open_ids[$i]}" "${branches[$i]}"
+  done
+}
+
+# fzf 的 change:reload 会反复调这个分支，第一次喂给 fzf 的那份也走它 —— 所以列表
+# 就在这儿算，父进程起 fzf 之前一个外部命令都不用 exec。
+# 顺序是「先把行吐给 fzf，再落盘」：写盘那个 mv 就不在「弹窗多久能看到东西」的路上。
+# 缓存在就直接读，不 exec cat。reload 会掐掉正在算的那个进程，所以「缓存没写成就
+# 重算」是常态而不是错误分支 —— 这也是抢在列表算完之前打字不会把列表清空的原因。
+if [ "$mode" = '__list' ]; then
+  cache="${2:-}"
+  # 主 checkout 由调用方用 $4 给死：子进程不必再推一遍
+  repo_root="${4:-}"
+  fresh=''
+  if [ -n "$cache" ] && [ -r "$cache" ]; then
+    body="$(<"$cache")"
+    [ -z "$body" ] || printf '%s\n' "$body"
+  else
+    load
+    rows
+    fresh=1
+  fi
+  if [ -n "${3:-}" ]; then
+    printf '+ create "%s"\t\t__create__\n' "$3"
+  else
+    printf '+ create (auto)\t\t__create__\n'
+  fi
+  # part 名带 pid：一次很快的 reload 会让两个 __list 同时在算，共用一个名会互踩。
+  [ -z "$fresh" ] || [ -z "$cache" ] ||
+    { rows >"$cache.$$" && mv "$cache.$$" "$cache"; } || true
+  exit 0
+fi
+
+dialog() {
+  local cache out status query key rest sel f path ws branch
+  # 循环外解析一次：repo_root 不会变，而不在仓库里要在弹窗画出来之前就报错。
+  resolve_repo_root
+  while :; do
+    # 不用 mktemp：这里只需要一个「还不存在」的路径（__list 靠它在不在判断列表算好
+    # 没有，mktemp 反而会先把文件创出来），而 popup 里 exec 一次 mktemp 要 36ms。
+    # $$ 之外再加 $RANDOM：pid 复用碰上上一轮没清掉的残留会让人看到一份旧列表。
+    # macOS 的 TMPDIR 是 0700 私有目录。
+    cache="${TMPDIR:-/tmp}/herdr-worktree.$$.$RANDOM.rows"
+    # 列表交给喂 fzf 的那个子进程自己算（见上面的 __list）：父进程在起 fzf 之前
+    # 一个外部命令都不 exec，弹窗几毫秒就有框，行随后补上。
+    out="$("$self" __list "$cache" '' "$repo_root" | fzf \
+      --print-query --expect=ctrl-d \
+      --delimiter '\t' --with-nth 1,2 --nth 1 \
+      --layout=reverse --info=hidden --no-multi --no-sort \
+      --prompt='worktree> ' --header='enter open/create · ctrl-d remove' \
+      --bind "change:reload('$self' __list '$cache' {q} '$repo_root')")" && status=0 || status=$?
+    rm -f "$cache" "$cache".*
+    # esc 是 130，无匹配是 1；其他退出码是 fzf 本身出了问题。
+    [ "$status" -le 1 ] || return 0
+    # 纯参数展开切分，不 exec：原来这里是 3 个 sed + 3 个 cut，popup 里就是 6 次
+    # exec，全落在「按下回车之后多久才有反应」上。
+    # fzf 输出是 query / key / 选中行三行，没选中就只有前两行（甚至只有一行）。
+    query="${out%%$'\n'*}"
+    key=''
+    sel=''
+    if [ "$out" != "$query" ]; then
+      rest="${out#*$'\n'}"
+      key="${rest%%$'\n'*}"
+      if [ "$rest" != "$key" ]; then
+        sel="${rest#*$'\n'}"
+        sel="${sel%%$'\n'*}"
+      fi
+    fi
+    # 前两列是显示用的（--with-nth 1,2），剥掉，剩下路径 / open 的 workspace / 分支名。
+    f="${sel#*$'\t'}"
+    f="${f#*$'\t'}"
+    path="${f%%$'\t'*}"
+    f="${f#*$'\t'}"
+    ws="${f%%$'\t'*}"
+    branch="${f#*$'\t'}"
+    if [ "$key" = 'ctrl-d' ]; then
+      [ -z "$sel" ] || [ "$path" = '__create__' ] || confirm_remove "$path" "$ws" "$branch"
+      continue
+    fi
+    if [ -z "$sel" ] || [ "$path" = '__create__' ]; then
+      printf 'creating %s…\n' "${query:-worktree}"
+      create "$query"
+    else
+      printf 'opening %s…\n' "$branch"
+      open_at "$path" "$branch"
+    fi
+    return 0
+  done
+}
+
+case "$mode" in
+  create)
+    resolve_repo_root
+    create "$requested"
+    ;;
+  open)
+    resolve_repo_root
+    load
+    for ((i = 0; i < count; i++)); do
+      if [ "${branches[$i]}" = "$requested" ]; then
+        open_at "${paths[$i]}" "${branches[$i]}"
+        exit 0
+      fi
+    done
+    fail "no worktree for branch $requested"
+    ;;
+  *)
+    command -v fzf >/dev/null 2>&1 || fail "fzf is required for the dialog"
+    [ -t 0 ] && [ -t 1 ] || fail "the dialog needs a terminal; use 'create'/'open' instead"
+    dialog
+    ;;
+esac

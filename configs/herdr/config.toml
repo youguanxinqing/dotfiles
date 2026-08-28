@@ -80,6 +80,11 @@ detach = "prefix+d"
 new_tab = ""
 close_tab = ""
 
+# 内建 new_worktree（默认 prefix+shift+g）建出来的 workspace 只有一个光 shell tab，
+# 而且起点是本地那份 remote ref —— 不 fetch 就是照着上次的旧 commit 开分支。
+# 让给下面的 herdr-worktree 对话框，它顺手 fetch、贴布局、也能开/删已有的。
+new_worktree = ""
+
 # herdr-navigator: prefix+/ 开 fuzzy navigator，prefix+shift+L 跳回上一个 workspace。
 # 原来在 prefix+t，让给了 settings（settings 的 s 被 flash 拿走）；/ 是 flash 腾出来的，
 # 模糊查找配 / 也顺。prefix+shift+L 避开默认占用的 prefix+l (focus_pane_right)。
@@ -198,6 +203,21 @@ key = "prefix+shift+r"
 type = "shell"
 command = '"${HERDR_BIN_PATH:-herdr}" server reload-config && "${HOME}/.local/bin/herdr-smart-tab" renumber-all'
 description = "reload config and renumber tabs"
+
+# 一个弹窗同时管开和建 worktree：输入既是过滤词又是新分支名，回车打开选中的
+# （已开着就跳过去）或按输入建一个，ctrl-d 摘掉 checkout（分支保留）。
+# 建完把 bm 的布局贴进 herdr 刚建的 workspace，不是另开一个。
+# 目录和软链不在这里 —— worktree-links 插件挂在 worktree.created 上，从这个键、
+# 内建键还是 agent 手里建的 worktree 都一样补。
+#
+# 高度写死成格子数：百分比在大屏上会撑出一个几乎全空的大框。
+[[keys.command]]
+key = "prefix+shift+g"
+type = "popup"
+command = "${HOME}/.local/bin/herdr-worktree"
+width = "70%"
+height = 14
+description = "worktree dialog (open or create)"
 
 # herdr-scratch: 浮空 scratchpad，nvim toggleterm 的等价物。shell 活在插件私有的
 # herdr-scratch session 里，prefix+q 收起来只是脱离浮层，进程和滚动历史都还在，
