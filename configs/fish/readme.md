@@ -20,4 +20,10 @@ fzf is installed by the `fzf` module through Homebrew. Fish automatically calls
 The sequence number is only picker metadata; it is removed before the selected
 command is inserted into the command line.
 
+`functions/bootmux.fish` shadows the `bootmux` binary, so `which bootmux` does
+not explain the behaviour: a bare `bootmux start` (or `stop`) in a directory
+with no `.tmuxinator.y[a]ml` is rewritten to the global `default` project, whose
+layout derives root and session name from `$PWD`. Any invocation that names a
+project is forwarded untouched.
+
 Machine-local overrides belong in `~/.config/fish/local.d/local.fish`.

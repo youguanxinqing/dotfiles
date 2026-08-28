@@ -1,0 +1,14 @@
+# 任何目录的兜底布局：没有自己的 .tmuxinator.y[a]ml 时用这一份。
+# root/session 从 $PWD 推，所以 `bootmux picker` 直接选 default 也能用，
+# 不依赖调用方传 settings。
+name: "{{ settings.session | default(env.PWD | split("/") | last) }}"
+root: "{{ settings.root | default(env.PWD) }}"
+
+startup_window: main
+
+windows:
+  - main:
+      layout: even-horizontal
+      panes:
+        - claude: claude
+        - shell:
