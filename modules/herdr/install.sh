@@ -31,11 +31,12 @@ youguanxinqing/herdr-flash|main|youguanxinqing.herdr-flash
 # resurrect 和 herdr-flash 都没发过 tag，只能跟 main。
 
 # 本地插件：manifest 就在仓库里，用 plugin link 指过去而不是从 GitHub 装 ——
-# nvim-here 的可执行文件是 bin/ 那份（modules/bin 已经链到 ~/.local/bin），
-# 插件目录里只有一个 herdr-plugin.toml，没什么可下载的。
-# 声明在这里的理由和上面那批一样：config.toml 里 prefix+y 绑的是
-# plugin_action，插件没 link 上这个键就是死的。
-LOCAL_PLUGINS='nvim-here'
+# 可执行文件都是 bin/ 那份（modules/bin 已经链到 ~/.local/bin），插件目录里
+# 只有一个 herdr-plugin.toml，没什么可下载的。
+# 声明在这里的理由和上面那批一样：nvim-here 没 link 上，config.toml 里绑到
+# plugin_action 的 prefix+y 就是死键；worktree-links 没 link 上更隐蔽 ——
+# 键都不涉及，只是新建的 worktree 从此静悄悄地缺一半软链。
+LOCAL_PLUGINS='nvim-here worktree-links'
 LOCAL_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)/configs/herdr/plugins/local"
 
 # `herdr plugin list` 每行形如 "- grep-nvim (grep-nvim) enabled [github:...]"。

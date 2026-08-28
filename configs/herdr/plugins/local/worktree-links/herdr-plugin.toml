@@ -1,0 +1,23 @@
+# worktree-links: herdr 建完 worktree 只给你一份干净 checkout —— .envrc、本地 config、
+# 隔壁仓库 hoist 出来的 node_modules 都不在里面，direnv 一进去就报错。这个插件唯一的
+# 职责是把 worktree.created 事件接到 bin/worktree-links 上，补什么由各仓库自己带的
+# <主 checkout>/.worktree-links 清单说，没清单的仓库脚本直接退出 0。
+#
+# 为什么是插件而不是 [[keys.command]]：键只在「你按了那个键」时触发，而 worktree 也会
+# 从 herdr 内建的 new_worktree、herdr worktree create、agent 手里冒出来 —— 事件是唯一
+# 覆盖全部来源的挂点。herdr 本身没有 config 级 hook，插件 [[events]] 是唯一的回调口。
+#
+# 命令写 ~/.local/bin 的绝对路径：事件命令的 PATH 很干净，而那边是 install.sh 发布的
+# 指回仓库的软链，改脚本立即生效。
+id = "worktree-links"
+name = "worktree-links"
+version = "1.0.0"
+# worktree.created 的下限取自 persiyanov.reviewr 的 manifest（它订阅同一个事件）；
+# 本机验证过的是 0.8.2。
+min_herdr_version = "0.7.5"
+platforms = ["linux", "macos"]
+description = "Provision a freshly created worktree from the repository's .worktree-links manifest."
+
+[[events]]
+on = "worktree.created"
+command = ["/bin/sh", "-c", "exec \"$HOME/.local/bin/worktree-links\""]

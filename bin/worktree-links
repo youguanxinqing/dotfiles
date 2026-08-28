@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+#
+# 把一个刚建好的 worktree 补成能跑的样子：建目录、软链、拷贝。
+#
+# herdr 的 worktree.created 事件只能「跑一条命令」，建目录和软链它一概不做；而
+# git worktree add 交出来的是一份干净 checkout —— 没有 .envrc、没有本地 config、
+# 没有隔壁仓库 hoist 出来的 node_modules，direnv 一进去就报错。这个脚本就是那条命令。
+#
+# 清单放在主 checkout 根目录的 .worktree-links，不放这个仓库里：它描述的是那个项目的
+# 本地依赖，换个项目内容完全不同；而私有清单进了公开仓库就得 gitignore，gitignore 掉的
+# 文件根本不随 clone 走，新机器上照样是空的 —— 白搭一层 plumbing。没有清单的仓库直接
+# 退出 0，所以对其他项目是彻底无感的。
+#
+# 清单格式看 `worktree-links -h` —— 它打出来的整份东西本身就是一个合法清单（每行
+# 都是注释），所以 `worktree-links -h > .worktree-links` 就是新仓库的起点。说明写在
+# 模板里而不是这里，是为了让它跟着人要编辑的那个文件走，不用回来读脚本。
+#
+# 幂等：已经对的条目跳过，指错地方的软链重新指过去。所以它同时是「补链」命令，
+# 手动跑 `worktree-links <path>` 或在 worktree 里 `worktree-links .` 都行。
+set -euo pipefail
+
+# herdr 跑事件命令时 PATH 很干净（git/jq/g-notify 都不在里面），把常见位置接在后面。
+# 接在后面而不是前面：调用方给的 PATH 说话更算数（测试就靠这个塞 stub）。
+PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+MANIFEST='.worktree-links'
+me="${0##*/}"
+
+usage() {
+  printf 'Usage: %s [<worktree-path>]\n' "$me"
+  printf 'Run `%s -h` for a commented %s template.\n' "$me" "$MANIFEST"
+}
+
+# 每行都是注释，所以 `worktree-links -h > .worktree-links` 直接就是一份「什么都还
+# 没打开」的清单：粘进去、把要的那几行前面的 # 去掉就行。
+template() {
+  cat <<EOF
+# ${MANIFEST} — the local dependencies this repository's worktrees need.
+# Lives in the root of the main checkout.
+#
+# Read by ${me}. Herdr runs it on the worktree.created event; you can
+# also run "${me} <worktree-path>" by hand, or "${me} ." from
+# inside a worktree. It is idempotent, so it doubles as a repair command.
+#
+# One entry per line. Blank lines and lines starting with # are ignored; fields
+# split on whitespace, so paths cannot contain spaces.
+# Everything below is commented out — drop the # on the lines you want.
+
+# Where new worktrees are created. Relative to the main checkout, or absolute.
+# Without this line herdr decides, which means its own ~/.herdr/worktrees.
+# Read by herdr-worktree; ${me} ignores the line.
+# worktree_dir ../wts
+
+# Create an empty directory inside the worktree. For build output, log mount
+# points, anything that should not be shared with the main checkout.
+# dir volumes/logs
+
+# Symlink. The source defaults to the same path in the main checkout.
+# link .envrc
+# link .claude/skills
+
+# Symlink whose source lives elsewhere: the second field is a source root, and
+# the first field is appended to it. This is how you reach a node_modules
+# hoisted out of a sibling repository.
+# link frontend/node_modules /path/to/other-repo
+
+# Copy instead of symlink, for tools that do not follow symlinks (tmuxinator is
+# one of them).
+# copy .tmuxinator.yml
+
+# An entry whose source is missing prints one skip line and moves on. That is
+# not a failure, so the manifest may be broader than any one machine — a
+# sibling repository you have not cloned yet can sit here from the start.
+EOF
+}
+
+case "${1:-}" in
+  -h | --help)
+    template
+    exit 0
+    ;;
+esac
+
+target="${1:-}"
+if [ -z "$target" ] && [ -n "${HERDR_PLUGIN_EVENT_JSON:-}" ]; then
+  # 只从事件里取路径，仓库根仍然问 git：herdr 的 wire shape 没有稳定性承诺，
+  # 而 git 对「主 checkout 在哪」的回答是确定的。
+  target="$(printf '%s' "$HERDR_PLUGIN_EVENT_JSON" |
+    jq -r '.data.worktree.path // empty' 2>/dev/null || true)"
+fi
+
+if [ -z "$target" ]; then
+  usage >&2
+  exit 2
+fi
+[ -d "$target" ] || { echo "$me: no such worktree: $target" >&2; exit 1; }
+
+target="$(CDPATH= cd -- "$target" && pwd -P)"
+
+# --git-common-dir 在 linked worktree 里指向主 checkout 的 .git，这是从任意
+# worktree 找回主 checkout 的唯一可靠问法（bin 里 bm 也这么问）。
+common="$(git -C "$target" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+[ -n "$common" ] || { echo "$me: not a git worktree: $target" >&2; exit 1; }
+case "$common" in
+  */.git) repo_root="${common%/.git}" ;;
+  *) repo_root="$common" ;; # 裸仓库：没有主 checkout，清单只能用绝对 source-root
+esac
+
+manifest="$repo_root/$MANIFEST"
+[ -f "$manifest" ] || exit 0
+
+failed=0
+
+note() { printf '%s\n' "$1"; }
+warn() {
+  printf '%s\n' "$1" >&2
+  failed=1
+}
+
+while read -r verb rel root _rest || [ -n "$verb" ]; do
+  case "$verb" in
+    '' | '#'*) continue ;;
+    # 建站位置是给 herdr-worktree 的，这个脚本只管往已经建好的 worktree 里填东西。
+    # 必须显式跳过：落到下面的未知条目分支就是退出 1 加一条通知。
+    worktree_dir) continue ;;
+  esac
+  if [ -z "$rel" ]; then
+    warn "$me: $MANIFEST: '$verb' needs a path"
+    continue
+  fi
+
+  dst="$target/$rel"
+
+  if [ "$verb" = dir ]; then
+    if [ -d "$dst" ]; then
+      note "ok       $rel"
+    elif mkdir -p "$dst"; then
+      note "created  $rel"
+    else
+      warn "failed   $rel: could not create the directory"
+    fi
+    continue
+  fi
+
+  src="${root:-$repo_root}/$rel"
+  if [ ! -e "$src" ]; then
+    note "skip     $rel: source is missing ($src)"
+    continue
+  fi
+
+  case "$verb" in
+    link)
+      if [ -L "$dst" ]; then
+        # 源换过位置的旧链重新指过去，不然它会一直悄悄指着不存在的路径。
+        if [ "$(readlink "$dst")" = "$src" ]; then
+          note "ok       $rel"
+        elif ln -sfn "$src" "$dst"; then
+          note "relinked $rel"
+        else
+          warn "failed   $rel: could not repoint the symlink"
+        fi
+      elif [ -e "$dst" ]; then
+        warn "blocked  $rel: exists and is not a symlink"
+      elif mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst"; then
+        note "linked   $rel"
+      else
+        warn "failed   $rel: could not create the symlink"
+      fi
+      ;;
+    copy)
+      # 软链在这条路径上不生效才会写 copy，所以遇到旧软链要换成真文件。
+      [ ! -L "$dst" ] || rm -f "$dst"
+      if [ -e "$dst" ]; then
+        note "ok       $rel"
+      elif mkdir -p "$(dirname "$dst")" && cp -R "$src" "$dst"; then
+        note "copied   $rel"
+      else
+        warn "failed   $rel: could not copy"
+      fi
+      ;;
+    *)
+      warn "$me: $MANIFEST: unknown entry '$verb'"
+      ;;
+  esac
+done <"$manifest"
+
+if [ "$failed" -ne 0 ]; then
+  # 事件命令没有 tty，输出只进 `herdr plugin log list`，没人会去看；
+  # 而一个缺了软链的 worktree 要等到 direnv 或构建炸了才暴露。
+  if [ ! -t 1 ] && command -v g-notify >/dev/null 2>&1; then
+    g-notify --title "worktree-links" \
+      --message "$(basename "$target"): some links were not created" || true
+  fi
+  exit 1
+fi

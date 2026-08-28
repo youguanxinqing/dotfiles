@@ -40,6 +40,7 @@ grep -Fqx 'pluck source=1' "$TEST_LOG"
 grep -Fqx 'install youguanxinqing/herdr-flash' "$TEST_LOG"
 # 本地插件（manifest 在仓库里）走 plugin link，不是 plugin install。
 grep -Fqx 'link nvim-here' "$TEST_LOG"
+grep -Fqx 'link worktree-links' "$TEST_LOG"
 if grep -Fq 'install nvim-here' "$TEST_LOG"; then
   echo "Herdr tried to install a local plugin from GitHub." >&2
   exit 1
