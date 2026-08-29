@@ -1,0 +1,143 @@
+{
+  "nodes": {
+    "ai-commit-message-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787528146,
+        "narHash": "sha256-LYndlPjkPY3kovjS+je/dWkcm5waRsvon/78vVSotpA=",
+        "owner": "youguanxinqing",
+        "repo": "ai-commit-message",
+        "rev": "d39f5a6a79283cbfe848fe6a2adf801d9eb2af35",
+        "type": "github"
+      },
+      "original": {
+        "owner": "youguanxinqing",
+        "ref": "v0.1.0",
+        "repo": "ai-commit-message",
+        "type": "github"
+      }
+    },
+    "bootmux-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787712382,
+        "narHash": "sha256-/9RcZm/Zdb6o7aTgxZTOpL+EjI1g0UHGT01K8XZRk0U=",
+        "owner": "griffinqiu",
+        "repo": "bootmux",
+        "rev": "8b2023f3828da746950906168a4613357c4df19d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "griffinqiu",
+        "ref": "v0.3.3",
+        "repo": "bootmux",
+        "type": "github"
+      }
+    },
+    "herdr": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay"
+      },
+      "locked": {
+        "lastModified": 1787161794,
+        "narHash": "sha256-sEGIN3dLZasaHob3EHscWBCIQHflMQVchYmzgsETDk4=",
+        "owner": "herdrdev",
+        "repo": "herdr",
+        "rev": "9eb521456ac0d19d3ab3d9d7cea3cca10baa8a4c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "herdrdev",
+        "ref": "v0.8.2",
+        "repo": "herdr",
+        "type": "github"
+      }
+    },
+    "keep-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787627873,
+        "narHash": "sha256-hFhCVOcnsF4tfsd157BAjgaW7uP02yyfwaoh0XwWLIQ=",
+        "owner": "youguanxinqing",
+        "repo": "keep",
+        "rev": "0a76d93f9b03718b546565529c9edb09e3527fcd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "youguanxinqing",
+        "ref": "v0.2.1",
+        "repo": "keep",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1787753485,
+        "narHash": "sha256-BZWCi9ZRJiARTuKTbbtvFTj7t1TK4G3UEckT3HyNfRg=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "062346a6d85bc4b49dfaa61c986e9c5be21217d1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "ai-commit-message-src": "ai-commit-message-src",
+        "bootmux-src": "bootmux-src",
+        "herdr": "herdr",
+        "keep-src": "keep-src",
+        "nixpkgs": "nixpkgs",
+        "staticcheck-src": "staticcheck-src"
+      }
+    },
+    "rust-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "herdr",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1783577481,
+        "narHash": "sha256-EWMxOWrJ031f8f/lrcEmhTRs4npw1/5N3Hcjin846c8=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "4cdea398dc491b082dccdce0fad1ed0b75fa3394",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "staticcheck-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787344256,
+        "narHash": "sha256-wellofnfLW4lQy68UQyFJfvrKCfrZ/EllLODX1g9taY=",
+        "owner": "dominikh",
+        "repo": "go-tools",
+        "rev": "1285a6a5ec1e0ebb658f49e82b6c566a878cc3cb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "dominikh",
+        "ref": "2026.2.1",
+        "repo": "go-tools",
+        "type": "github"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
