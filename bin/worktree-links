@@ -82,11 +82,13 @@ case "${1:-}" in
 esac
 
 target="${1:-}"
+from_event=''
 if [ -z "$target" ] && [ -n "${HERDR_PLUGIN_EVENT_JSON:-}" ]; then
   # 只从事件里取路径，仓库根仍然问 git：herdr 的 wire shape 没有稳定性承诺，
   # 而 git 对「主 checkout 在哪」的回答是确定的。
   target="$(printf '%s' "$HERDR_PLUGIN_EVENT_JSON" |
     jq -r '.data.worktree.path // empty' 2>/dev/null || true)"
+  from_event=1
 fi
 
 if [ -z "$target" ]; then
@@ -185,9 +187,12 @@ while read -r verb rel root _rest || [ -n "$verb" ]; do
 done <"$manifest"
 
 if [ "$failed" -ne 0 ]; then
-  # 事件命令没有 tty，输出只进 `herdr plugin log list`，没人会去看；
-  # 而一个缺了软链的 worktree 要等到 direnv 或构建炸了才暴露。
-  if [ ! -t 1 ] && command -v g-notify >/dev/null 2>&1; then
+  # 只有事件那条路才弹：它的输出只进 `herdr plugin log list`，没人会去看，而一个
+  # 缺了软链的 worktree 要等到 direnv 或构建炸了才暴露。
+  # 原来的条件是 `! -t 1`（stdout 不是终端），但那对「手工跑但输出被接走」同样成立
+  # —— 测试就是这么被误判的，每跑一次套件就往桌面弹一条假警报。手工跑失败了
+  # stderr 就在眼前，不需要通知。
+  if [ -n "$from_event" ] && command -v g-notify >/dev/null 2>&1; then
     g-notify --title "worktree-links" \
       --message "$(basename "$target"): some links were not created" || true
   fi

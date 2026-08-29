@@ -90,6 +90,30 @@ event="{\"event\":\"worktree_created\",\"data\":{\"type\":\"worktree_created\",\
 HERDR_PLUGIN_EVENT_JSON="$event" "$BIN" >/dev/null
 assert_link "$WT/.envrc" "$MAIN/.envrc"
 
+# 桌面通知只属于事件那条路：它的输出没人看得见。手工跑（哪怕 stdout 被接走，比如
+# 这个测试自己）失败时 stderr 就在眼前，弹通知就是假警报 —— 原来的条件是
+# `! -t 1`，跑一次套件就往桌面弹一条。
+NSTUB="$TEST_ROOT/nstub"
+mkdir -p "$NSTUB"
+printf '%s\n' '#!/bin/bash' 'echo "$*" >> "$STUB_NLOG"' >"$NSTUB/g-notify"
+chmod +x "$NSTUB/g-notify"
+: >"$TEST_ROOT/notify.log"
+# 上面那次事件跑又把这条软链接回去了，先摘掉再放一个真文件挡路。
+rm -f "$WT/frontend/node_modules"
+printf 'hand written\n' >"$WT/frontend/node_modules"
+
+if PATH="$NSTUB:$PATH" STUB_NLOG="$TEST_ROOT/notify.log" "$BIN" "$WT" >/dev/null 2>&1; then
+  die "the blocked entry stopped being a failure"
+fi
+[ ! -s "$TEST_ROOT/notify.log" ] || die "a hand-run failure raised a desktop notification"
+
+if PATH="$NSTUB:$PATH" STUB_NLOG="$TEST_ROOT/notify.log" \
+  HERDR_PLUGIN_EVENT_JSON="$event" "$BIN" >/dev/null 2>&1; then
+  die "the blocked entry stopped being a failure on the event path"
+fi
+assert_contains "$(<"$TEST_ROOT/notify.log")" 'some links were not created'
+rm "$WT/frontend/node_modules"
+
 # 没有清单的仓库彻底无感 —— 事件会为每个仓库触发，这条是别的项目不受影响的保证。
 rm "$MAIN/.worktree-links"
 "$BIN" "$WT" >/dev/null
