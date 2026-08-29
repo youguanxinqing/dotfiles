@@ -70,6 +70,18 @@ other adapters. Extending source verification beyond Homebrew would require
 installer-specific checks; pinning versions would need a `min_version` key in
 dependency sections.
 
+## A tool that upgrades itself needs a floor, not an equality
+
+`hclient-cli` ships its own `upgrade`, which replaces the binary with whatever
+`latest-version.json` names. Mihomo's exact-version `check` would be wrong here:
+the next `install.sh` would read the mismatch as drift, re-download 42M, and put
+the machine back on the release the user had just moved off.
+
+`modules/hclient-cli/install.sh` treats `HCLIENT_CLI_VERSION` as a minimum
+instead. A new machine still gets the pinned build with its published SHA-256
+verified, and an already-upgraded machine is left alone. Raising the floor stays
+a deliberate edit rather than something a rerun performs silently.
+
 ## One trap when scripting against herdr
 
 Running `herdr plugin list | grep -q` once per plugin under-reports. `grep -q`
