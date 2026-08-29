@@ -49,7 +49,7 @@ chmod +x "$TEST_ROOT/bin/bootmux"
 dispatch() {
   local dir="$1"
   shift
-  PATH="$TEST_ROOT/bin:/usr/bin:/bin" WRAPPER="$WRAPPER" DIR="$dir" \
+  PATH="$TEST_ROOT/bin:$TEST_SYSTEM_PATH" WRAPPER="$WRAPPER" DIR="$dir" \
     "$FISH_BIN" --no-config -c 'source $WRAPPER; cd $DIR; bootmux $argv' -- "$@"
 }
 

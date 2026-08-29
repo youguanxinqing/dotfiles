@@ -28,7 +28,7 @@ printf '%s\n' \
 chmod +x "$TEST_BIN/herdr"
 : > "$TEST_LOG"
 
-if PATH="$TEST_BIN:/usr/bin:/bin" HERDR_TEST_LOG="$TEST_LOG" \
+if PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HERDR_TEST_LOG="$TEST_LOG" \
   "$ROOT/modules/herdr/install.sh" install >/dev/null 2>&1; then
   echo "Herdr plugin installation ignored a failed plugin." >&2
   exit 1
