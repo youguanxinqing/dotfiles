@@ -47,6 +47,15 @@ end
 # `...` 只能靠 abbr，而 abbr 只在交互式下展开——脚本里写 `...` 会是 Unknown command。
 abbr -a ... "cd ../.."
 
+# Match Omarchy's eza interface while keeping the command line as `ls`:
+# Fish aliases resolve only when the command executes; abbreviations expand while typing.
+if type -q eza
+  alias ls "eza -lh --group-directories-first --icons=auto"
+  alias lsa "ls -a"
+  alias lt "eza --tree --level=2 --long --icons --git"
+  alias lta "lt -a"
+end
+
 abbr -a z "zellij"
 abbr -a za "zellij attach"
 abbr -a zls "zellij ls"
