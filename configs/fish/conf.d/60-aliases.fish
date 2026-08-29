@@ -36,12 +36,25 @@ if test -e $FISH_PROXY_FILE
     set -gx  HTTP_PROXY $PROXY_SOCK_DSN; \
     set -gx  https_proxy $PROXY_SOCK_DSN; \
     set -gx  HTTPS_PROXY $PROXY_SOCK_DSN"
-  alias unproxy="set -e ALL_PROXY; \
-    set -e  http_proxy; \
-    set -e  HTTP_PROXY; \
-    set -e  https_proxy; \
-    set -e  HTTPS_PROXY"
 end
+
+# 懒猫微服 daemon 的代理口。61090 是 hclient-cli 文档里的默认 -proxy-listen-addr，
+# 每台机器都一样，所以它进仓库，而不是进 gitignore 掉的 proxy.fish —— 那个文件留给
+# 真的因机器而异的地址。同一个端口 HTTP CONNECT 和 SOCKS5 都讲，取 http 就够了。
+set -gx PROXY_LAZYCAT_DSN "http://127.0.0.1:61090"
+alias proxy-lazycat="set -gx ALL_PROXY $PROXY_LAZYCAT_DSN; \
+  set -gx  http_proxy $PROXY_LAZYCAT_DSN; \
+  set -gx  HTTP_PROXY $PROXY_LAZYCAT_DSN; \
+  set -gx  https_proxy $PROXY_LAZYCAT_DSN; \
+  set -gx  HTTPS_PROXY $PROXY_LAZYCAT_DSN"
+
+# unproxy 不读任何 DSN，所以不该跟着 proxy.fish 一起消失：没有那个私有文件的机器
+# 现在也能用 proxy-lazycat，得留个关得掉的开关。
+alias unproxy="set -e ALL_PROXY; \
+  set -e  http_proxy; \
+  set -e  HTTP_PROXY; \
+  set -e  https_proxy; \
+  set -e  HTTPS_PROXY"
 
 # `..` 不用配，fish 的 implicit cd 认 `.` / `..` / 带 `/` 的路径（裸目录名不认）。
 # `...` 只能靠 abbr，而 abbr 只在交互式下展开——脚本里写 `...` 会是 Unknown command。
