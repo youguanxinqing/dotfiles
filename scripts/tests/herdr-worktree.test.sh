@@ -10,6 +10,7 @@ BIN="$ROOT/bin/herdr-worktree"
 STUB="$TEST_ROOT/stub"
 LOG="$TEST_ROOT/calls.log"
 NEWWT="$TEST_ROOT/newwt"
+HERDR_TEST_PATH="$STUB:$(dirname -- "$(command -v git)"):$(dirname -- "$(command -v jq)"):$TEST_SYSTEM_PATH"
 mkdir -p "$STUB" "$NEWWT" "$TEST_ROOT/parent/x" "$TEST_ROOT/parent/y" "$TEST_ROOT/other/z"
 : >"$LOG"
 
@@ -24,7 +25,7 @@ git -C "$MAIN" push -q origin master
 git -C "$MAIN" remote set-head origin -a >/dev/null 2>&1
 
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'echo "herdr $*" >> "$STUB_LOG"' \
   'case "$1 $2" in' \
   '  "worktree list")' \
@@ -48,14 +49,14 @@ printf '%s\n' \
 # bm 是 fish function，所以脚本走 fish -c —— stub 把关键的三样记下来：
 # 目标 workspace、传给 bm 的参数、以及运行时的 cwd（bm 靠它推 root/session）。
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'echo "fish ws=${HERDR_WORKSPACE_ID:-none} cwd=$PWD args=$*" >> "$STUB_LOG"' >"$STUB/fish"
 
-printf '%s\n' '#!/bin/bash' 'echo "smart-tab ws=${HERDR_ACTIVE_WORKSPACE_ID:-none} $*" >> "$STUB_LOG"' >"$STUB/herdr-smart-tab"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "smart-tab ws=${HERDR_ACTIVE_WORKSPACE_ID:-none} $*" >> "$STUB_LOG"' >"$STUB/herdr-smart-tab"
 chmod +x "$STUB"/*
 
 run() {
-  PATH="$STUB:/usr/bin:/bin" STUB_LOG="$LOG" STUB_ROOT="$TEST_ROOT" \
+  PATH="$HERDR_TEST_PATH" STUB_LOG="$LOG" STUB_ROOT="$TEST_ROOT" \
     HERDR_BIN_PATH="$STUB/herdr" HERDR_ACTIVE_PANE_CWD="${RUN_CWD:-$MAIN}" "$BIN" "$@"
 }
 
@@ -151,7 +152,7 @@ assert_contains "$out" '+ create (auto)'
 # 缓存不在时 __list 得自己把列表算出来：fzf 的 change:reload 会掐掉正在算的那个
 # 进程，所以「缓存没写成」是常态而不是错误分支。算完还要落盘给后续 reload 用。
 list() {
-  PATH="$STUB:/usr/bin:/bin" STUB_LOG="$LOG" STUB_ROOT="$TEST_ROOT" \
+  PATH="$HERDR_TEST_PATH" STUB_LOG="$LOG" STUB_ROOT="$TEST_ROOT" \
     HERDR_BIN_PATH="$STUB/herdr" "$BIN" __list "$@"
 }
 : >"$LOG"
@@ -191,7 +192,8 @@ RUN_CWD="$TEST_ROOT/inside/deep/er" run create from-subdir >/dev/null
 assert_contains "$(<"$LOG")" "--cwd $MAIN"
 
 # 不在 git 仓库里要报错，而不是拿 $PWD 猜一个仓库出来。
-if PATH="$STUB:/usr/bin:/bin" STUB_LOG="$LOG" STUB_ROOT="$TEST_ROOT" \
+printf 'not a gitdir\n' >"$TEST_ROOT/other/.git"
+if PATH="$HERDR_TEST_PATH" STUB_LOG="$LOG" STUB_ROOT="$TEST_ROOT" \
   HERDR_BIN_PATH="$STUB/herdr" HERDR_ACTIVE_PANE_CWD="$TEST_ROOT/other" \
   "$BIN" create anything >/dev/null 2>&1; then
   echo "herdr-worktree accepted a cwd outside any git repository." >&2
@@ -206,15 +208,15 @@ if command -v python3 >/dev/null 2>&1; then
   # stub fzf 回放 $STUB_ROOT/fzf.out（@ROW3@ 换成收到的第 3 行），第二次当 esc 退出，
   # 否则 dialog 的循环不结束。
   printf '%s\n' \
-    '#!/bin/bash' \
+    '#!/usr/bin/env bash' \
     'cat > "$STUB_ROOT/fzf.in"' \
     'n=$(( $(cat "$STUB_ROOT/fzf.n" 2>/dev/null || echo 0) + 1 ))' \
     'echo "$n" > "$STUB_ROOT/fzf.n"' \
     '[ "$n" -eq 1 ] || exit 130' \
     'sed -e "s|@ROW3@|$(sed -n 3p "$STUB_ROOT/fzf.in")|" "$STUB_ROOT/fzf.out"' >"$STUB/fzf"
   printf '%s\n' \
-    '#!/bin/bash' \
-    "PATH=\"$STUB:/usr/bin:/bin\" STUB_LOG=\"$LOG\" STUB_ROOT=\"$TEST_ROOT\" \\" \
+    '#!/usr/bin/env bash' \
+    "PATH=\"$HERDR_TEST_PATH\" STUB_LOG=\"$LOG\" STUB_ROOT=\"$TEST_ROOT\" \\" \
     "  HERDR_BIN_PATH=\"$STUB/herdr\" HERDR_ACTIVE_PANE_CWD=\"$MAIN\" \"$BIN\"" >"$TEST_ROOT/pty.sh"
   chmod +x "$STUB/fzf" "$TEST_ROOT/pty.sh"
   # query / key / 选中行三行齐：ctrl-d 删第 3 行

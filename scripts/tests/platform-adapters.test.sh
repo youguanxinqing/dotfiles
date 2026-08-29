@@ -10,14 +10,15 @@ new_path() {
   local name=$1 platform=$2
   ADAPTER_BIN="$TEST_ROOT/$name"
   mkdir -p "$ADAPTER_BIN"
-  ln -s /bin/bash "$ADAPTER_BIN/bash"
-  printf '#!/bin/bash\nprintf '\''%%s\\n'\'' '\''%s'\''\n' "$platform" > "$ADAPTER_BIN/uname"
+  ln -s "$TEST_BASH_BIN" "$ADAPTER_BIN/bash"
+  ln -s "$(command -v cat)" "$ADAPTER_BIN/cat"
+  printf '#!/usr/bin/env bash\nprintf '\''%%s\\n'\'' '\''%s'\''\n' "$platform" > "$ADAPTER_BIN/uname"
   chmod +x "$ADAPTER_BIN/uname"
 }
 
 capture_stdin() {
   local command_path=$1
-  printf '#!/bin/bash\n/bin/cat > "$ADAPTER_TEST_LOG"\n' > "$command_path"
+  printf '#!/usr/bin/env bash\ncat > "$ADAPTER_TEST_LOG"\n' > "$command_path"
   chmod +x "$command_path"
 }
 
@@ -37,9 +38,9 @@ printf 'wayland clipboard' | PATH="$ADAPTER_BIN" WAYLAND_DISPLAY=wayland-1 \
 
 new_path xclip-copy Linux
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'printf '\''%s\n'\'' "$*" > "$ADAPTER_ARGS_LOG"' \
-  '/bin/cat > "$ADAPTER_TEST_LOG"' > "$ADAPTER_BIN/xclip"
+  'cat > "$ADAPTER_TEST_LOG"' > "$ADAPTER_BIN/xclip"
 chmod +x "$ADAPTER_BIN/xclip"
 printf 'xclip clipboard' | PATH="$ADAPTER_BIN" DISPLAY=:1 \
   ADAPTER_ARGS_LOG="$TEST_ROOT/xclip-args.log" ADAPTER_TEST_LOG="$TEST_ROOT/xclip-copy.log" \
@@ -49,9 +50,9 @@ grep -Fqx -- '-selection clipboard' "$TEST_ROOT/xclip-args.log"
 
 new_path xsel-copy Linux
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'printf '\''%s\n'\'' "$*" > "$ADAPTER_ARGS_LOG"' \
-  '/bin/cat > "$ADAPTER_TEST_LOG"' > "$ADAPTER_BIN/xsel"
+  'cat > "$ADAPTER_TEST_LOG"' > "$ADAPTER_BIN/xsel"
 chmod +x "$ADAPTER_BIN/xsel"
 printf 'xsel clipboard' | PATH="$ADAPTER_BIN" DISPLAY=:1 \
   ADAPTER_ARGS_LOG="$TEST_ROOT/xsel-args.log" ADAPTER_TEST_LOG="$TEST_ROOT/xsel-copy.log" \
@@ -69,15 +70,15 @@ grep -Fq 'no usable clipboard backend' "$TEST_ROOT/no-copy.err"
 
 # Hammerspoon gets data through environment variables, never generated Lua.
 new_path hammerspoon-notify Darwin
-printf '#!/bin/bash\nexit 0\n' > "$ADAPTER_BIN/pgrep"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$ADAPTER_BIN/pgrep"
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'printf '\''%s\n'\'' "$DOTFILES_NOTIFY_TITLE" "$DOTFILES_NOTIFY_MESSAGE" "$DOTFILES_NOTIFY_AGENT" > "$ADAPTER_TEST_LOG"' \
   'printf '\''%s\n'\'' "$*" > "$ADAPTER_ARGS_LOG"' \
   'printf '\''ok\n'\''' > "$ADAPTER_BIN/hs"
 chmod +x "$ADAPTER_BIN/pgrep" "$ADAPTER_BIN/hs"
 # base64 and tr live outside the stub directory; the adapter encodes with them.
-PATH="$ADAPTER_BIN:/usr/bin:/bin" ADAPTER_TEST_LOG="$TEST_ROOT/hs-env.log" \
+PATH="$ADAPTER_BIN:$TEST_SYSTEM_PATH" ADAPTER_TEST_LOG="$TEST_ROOT/hs-env.log" \
   ADAPTER_ARGS_LOG="$TEST_ROOT/hs-args.log" \
   "$ROOT/bin/g-notify" --title 'Title "quoted" ]]' --message 'body with spaces' --agent codex
 for value in 'Title "quoted" ]]' 'body with spaces' codex; do
@@ -91,7 +92,7 @@ fi
 # The native fallbacks preserve each argument, including whitespace.
 new_path terminal-notify Darwin
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'printf '\''%s\n'\'' "$@" > "$ADAPTER_TEST_LOG"' > "$ADAPTER_BIN/terminal-notifier"
 chmod +x "$ADAPTER_BIN/terminal-notifier"
 PATH="$ADAPTER_BIN" ADAPTER_TEST_LOG="$TEST_ROOT/terminal-args.log" \
@@ -103,7 +104,7 @@ PATH="$ADAPTER_BIN" ADAPTER_TEST_LOG="$TEST_ROOT/terminal-args.log" \
 
 new_path linux-notify Linux
 printf '%s\n' \
-  '#!/bin/bash' \
+  '#!/usr/bin/env bash' \
   'printf '\''%s\n'\'' "$@" > "$ADAPTER_TEST_LOG"' > "$ADAPTER_BIN/notify-send"
 chmod +x "$ADAPTER_BIN/notify-send"
 PATH="$ADAPTER_BIN" ADAPTER_TEST_LOG="$TEST_ROOT/linux-args.log" \

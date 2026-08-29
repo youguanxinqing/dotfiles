@@ -32,7 +32,7 @@ chmod +x "$BREW_BIN/brew" "$BREW_BIN/uname"
 printf 'all | feature-only | feature-only | brew | feature-only\nmacos | feature-cask | feature-cask | brew-cask | feature-cask\nall | shared | shared | brew | shared\n' > "$BREW_ROOT/feature.conf"
 printf 'all | shared | shared | brew | shared\n' > "$BREW_ROOT/keep.conf"
 : > "$BREW_ROOT/brew.log"
-PATH="$BREW_BIN:/usr/bin:/bin" HOME="$BREW_HOME" BREW_LOG="$BREW_ROOT/brew.log" \
+PATH="$BREW_BIN:$TEST_SYSTEM_PATH" HOME="$BREW_HOME" BREW_LOG="$BREW_ROOT/brew.log" \
   "$ROOT/scripts/install-deps.sh" --clean "$BREW_ROOT/feature.conf" "$BREW_ROOT/keep.conf"
 grep -Fqx 'uninstall feature-only' "$BREW_ROOT/brew.log"
 grep -Fqx 'uninstall --cask feature-cask' "$BREW_ROOT/brew.log"
@@ -67,7 +67,7 @@ printf '#!/usr/bin/env bash\necho Linux\n' > "$SOURCE_BREW_BIN/uname"
 chmod +x "$SOURCE_WRONG_BIN/demo" "$SOURCE_BREW_BIN/brew" "$SOURCE_BREW_BIN/uname"
 printf 'all | demo | demo | brew | demo\n' > "$SOURCE_ROOT/normalized.manifest"
 : > "$SOURCE_LOG"
-PATH="$SOURCE_WRONG_BIN:$SOURCE_BREW_BIN:/usr/bin:/bin" HOME="$SOURCE_HOME" \
+PATH="$SOURCE_WRONG_BIN:$SOURCE_BREW_BIN:$TEST_SYSTEM_PATH" HOME="$SOURCE_HOME" \
   BREW_SOURCE_BIN="$SOURCE_BREW_BIN" BREW_SOURCE_CELLAR="$SOURCE_CELLAR" \
   BREW_SOURCE_LOG="$SOURCE_LOG" \
   "$ROOT/scripts/install-deps.sh" "$SOURCE_ROOT/normalized.manifest"
@@ -95,14 +95,14 @@ printf '%s\n' \
 printf 'linux | fail | fail-cli | script | modules/fail/install.sh\nlinux | demo | demo-cli | script | modules/demo/install.sh\nmacos | mac-only | mac-only | script | modules/demo/install.sh\n' > "$SCRIPT_ROOT/normalized.manifest"
 chmod +x "$SCRIPT_BIN/brew" "$SCRIPT_BIN/uname" "$SCRIPT_ROOT/modules/fail/install.sh" "$SCRIPT_ROOT/modules/demo/install.sh"
 export SCRIPT_TEST_BIN="$SCRIPT_BIN"
-if PATH="$SCRIPT_BIN:/usr/bin:/bin" HOME="$SCRIPT_HOME" \
+if PATH="$SCRIPT_BIN:$TEST_SYSTEM_PATH" HOME="$SCRIPT_HOME" \
   "$SCRIPT_ROOT/scripts/install-deps.sh" "$SCRIPT_ROOT/normalized.manifest"; then
   echo "Dependency installation ignored a failed module." >&2
   exit 1
 fi
 [[ -x "$SCRIPT_BIN/demo-cli" ]]
 [[ ! -e "$SCRIPT_BIN/mac-only" ]]
-PATH="$SCRIPT_BIN:/usr/bin:/bin" HOME="$SCRIPT_HOME" \
+PATH="$SCRIPT_BIN:$TEST_SYSTEM_PATH" HOME="$SCRIPT_HOME" \
   "$SCRIPT_ROOT/scripts/install-deps.sh" --clean "$SCRIPT_ROOT/normalized.manifest"
 [[ ! -e "$SCRIPT_BIN/demo-cli" ]]
 
@@ -125,7 +125,7 @@ printf '%s\n' \
   'esac' > "$BOOT_ROOT/modules/demo/install.sh"
 printf 'all | missing-brew | missing-brew | brew | missing-brew\nall | demo | demo | script | modules/demo/install.sh\n' > "$BOOT_ROOT/normalized.manifest"
 chmod +x "$BOOT_BIN/uname" "$BOOT_BIN/curl" "$BOOT_ROOT/modules/demo/install.sh"
-if PATH="$BOOT_BIN:/usr/bin:/bin" HOME="$BOOT_HOME" BOOTSTRAP_BIN="$BOOT_BIN" \
+if PATH="$BOOT_BIN:$TEST_SYSTEM_PATH" HOME="$BOOT_HOME" BOOTSTRAP_BIN="$BOOT_BIN" \
   BOOTSTRAP_BREW="$BOOT_ROOT/no-brew" \
   "$BOOT_ROOT/scripts/install-deps.sh" "$BOOT_ROOT/normalized.manifest" >/dev/null 2>&1; then
   echo "Homebrew bootstrap failure was not reported." >&2
@@ -148,7 +148,7 @@ printf '%s\n' \
   'all | planned-go-cli | planned-go-cli | go | example.com/planned@latest' \
   'all | planned-node-cli | planned-node-cli | npm | planned-node-cli' \
   > "$DRY_ROOT/normalized.manifest"
-PATH="$DRY_BIN:/usr/bin:/bin" HOME="$DRY_HOME" \
+PATH="$DRY_BIN:$TEST_SYSTEM_PATH" HOME="$DRY_HOME" \
   "$ROOT/scripts/install-deps.sh" --dry-run "$DRY_ROOT/normalized.manifest" > "$DRY_ROOT/output"
 grep -Fq '+ rustup default stable' "$DRY_ROOT/output"
 grep -Fq '+ fnm install --lts' "$DRY_ROOT/output"

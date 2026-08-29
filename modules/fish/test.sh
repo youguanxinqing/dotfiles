@@ -43,12 +43,12 @@ chmod +x "$GENERIC_BIN/uname" "$GENERIC_BIN/fish" "$GENERIC_BIN/getent" \
   "$GENERIC_BIN/apt-get" "$GENERIC_BIN/sudo"
 : > "$GENERIC_LOG"
 
-output="$(PATH="$GENERIC_BIN:/usr/bin:/bin" HOME="$GENERIC_HOME" USER=demo SHELL=/bin/bash \
+output="$(PATH="$GENERIC_BIN:$TEST_SYSTEM_PATH" HOME="$GENERIC_HOME" USER=demo SHELL=/bin/bash \
   DOTFILES_OS_RELEASE="$GENERIC_OS_RELEASE" DOTFILES_OMARCHY_ROOT="$GENERIC_ROOT/no-omarchy" \
   "$ROOT/modules/fish/post-install.sh")"
 assert_contains "$output" "Run 'chsh -s $GENERIC_BIN/fish'"
 
-PATH="$GENERIC_BIN:/usr/bin:/bin" HOME="$GENERIC_HOME" \
+PATH="$GENERIC_BIN:$TEST_SYSTEM_PATH" HOME="$GENERIC_HOME" \
   DOTFILES_OS_RELEASE="$GENERIC_OS_RELEASE" DOTFILES_OMARCHY_ROOT="$GENERIC_ROOT/no-omarchy" \
   FISH_TEST_LOG="$GENERIC_LOG" "$ROOT/modules/fish/install.sh" install
 grep -Fqx 'update' "$GENERIC_LOG"
@@ -58,7 +58,7 @@ grep -Fqx 'apt' "$GENERIC_HOME/.local/state/dotfiles/fish-installer"
 UNOWNED_HOME="$GENERIC_ROOT/unowned-home"
 mkdir -p "$UNOWNED_HOME"
 package_log_size="$(wc -l < "$GENERIC_LOG" | tr -d ' ')"
-output="$(PATH="$GENERIC_BIN:/usr/bin:/bin" HOME="$UNOWNED_HOME" USER=demo SHELL=/bin/bash \
+output="$(PATH="$GENERIC_BIN:$TEST_SYSTEM_PATH" HOME="$UNOWNED_HOME" USER=demo SHELL=/bin/bash \
   DOTFILES_OS_RELEASE="$GENERIC_OS_RELEASE" DOTFILES_OMARCHY_ROOT="$GENERIC_ROOT/no-omarchy" \
   FISH_TEST_LOG="$GENERIC_LOG" "$ROOT/modules/fish/install.sh" clean)"
 assert_contains "$output" "this dotfiles installer did not record installing it"
@@ -68,7 +68,7 @@ printf '%s\n' \
   '#!/usr/bin/env bash' \
   'printf '\''demo:x:1000:1000::/tmp:%s\n'\'' "$(dirname -- "$0")/fish"' > "$GENERIC_BIN/getent"
 chmod +x "$GENERIC_BIN/getent"
-output="$(PATH="$GENERIC_BIN:/usr/bin:/bin" HOME="$GENERIC_HOME" USER=demo SHELL=/bin/bash \
+output="$(PATH="$GENERIC_BIN:$TEST_SYSTEM_PATH" HOME="$GENERIC_HOME" USER=demo SHELL=/bin/bash \
   DOTFILES_OS_RELEASE="$GENERIC_OS_RELEASE" DOTFILES_OMARCHY_ROOT="$GENERIC_ROOT/no-omarchy" \
   "$ROOT/modules/fish/post-install.sh")"
 assert_contains "$output" "Fish is already the login shell: $GENERIC_BIN/fish"
@@ -106,7 +106,7 @@ OMARCHY_COMPAT_OS_RELEASE="$OMARCHY_TEST_ROOT/compat-os-release"
 OMARCHY_COMPAT_ROOT="$OMARCHY_TEST_ROOT/compat-root"
 printf 'ID=arch\n' > "$OMARCHY_COMPAT_OS_RELEASE"
 mkdir -p "$OMARCHY_COMPAT_ROOT"
-PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" DOTFILES_OS_RELEASE="$OMARCHY_COMPAT_OS_RELEASE" \
+PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" DOTFILES_OS_RELEASE="$OMARCHY_COMPAT_OS_RELEASE" \
   DOTFILES_OMARCHY_ROOT="$OMARCHY_COMPAT_ROOT" \
   bash -c 'source "$1"; fish_is_omarchy' _ "$ROOT/modules/fish/platform.sh"
 
@@ -115,14 +115,14 @@ cp "$BASHRC" "$ORIGINAL_BASHRC"
 : > "$OMARCHY_LOG"
 : > "$CHSH_LOG"
 
-PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$OMARCHY_TEST_HOME" \
+PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$OMARCHY_TEST_HOME" \
   DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" "$ROOT/modules/fish/install.sh" check
-PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$OMARCHY_TEST_HOME" \
+PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$OMARCHY_TEST_HOME" \
   DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" OMARCHY_TEST_LOG="$OMARCHY_LOG" \
   "$ROOT/modules/fish/install.sh" install
 grep -Fqx 'pkg add omarchy-fish' "$OMARCHY_LOG"
 
-output="$(PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$OMARCHY_TEST_HOME" \
+output="$(PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$OMARCHY_TEST_HOME" \
   USER=demo SHELL=/usr/bin/bash DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" \
   DOTFILES_BASHRC="$BASHRC" DOTFILES_BACKUP_DIR="$BACKUP_DIR" \
   OMARCHY_TEST_LOG="$OMARCHY_LOG" FISH_CHSH_LOG="$CHSH_LOG" \
@@ -136,7 +136,7 @@ grep -Fq 'exec fish --login' "$BASHRC"
 
 first_checksum="$(cksum "$BASHRC")"
 first_backup_count="$(find "$BACKUP_DIR" -type f -name 'bashrc.*' | wc -l | tr -d ' ')"
-output="$(PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$OMARCHY_TEST_HOME" \
+output="$(PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$OMARCHY_TEST_HOME" \
   USER=demo SHELL=/usr/bin/bash DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" \
   DOTFILES_BASHRC="$BASHRC" DOTFILES_BACKUP_DIR="$BACKUP_DIR" \
   "$ROOT/modules/fish/post-install.sh")"
@@ -153,7 +153,7 @@ if [[ -r /etc/os-release ]] && grep -Eq '^ID="?omarchy"?$' /etc/os-release && \
   SKEL_BACKUPS="$OMARCHY_TEST_ROOT/skel-backups"
   mkdir -p "$SKEL_TEST_HOME"
   cp -p /etc/skel/.bashrc "$SKEL_BASHRC"
-  PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$SKEL_TEST_HOME" \
+  PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$SKEL_TEST_HOME" \
     USER=demo SHELL=/usr/bin/bash DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" \
     DOTFILES_BASHRC="$SKEL_BASHRC" DOTFILES_BACKUP_DIR="$SKEL_BACKUPS" \
     "$ROOT/modules/fish/post-install.sh" >/dev/null
@@ -162,7 +162,7 @@ if [[ -r /etc/os-release ]] && grep -Eq '^ID="?omarchy"?$' /etc/os-release && \
   [[ "$(find "$SKEL_BACKUPS" -type f -name 'bashrc.*' | wc -l | tr -d ' ')" == 1 ]]
 fi
 
-PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$OMARCHY_TEST_HOME" \
+PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$OMARCHY_TEST_HOME" \
   DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" DOTFILES_BASHRC="$BASHRC" \
   DOTFILES_BACKUP_DIR="$BACKUP_DIR" OMARCHY_TEST_LOG="$OMARCHY_LOG" \
   "$ROOT/modules/fish/install.sh" clean
@@ -175,7 +175,7 @@ SYMLINK_SOURCE="$OMARCHY_TEST_ROOT/symlink-source"
 mkdir -p "$SYMLINK_HOME"
 printf '# managed elsewhere\n' > "$SYMLINK_SOURCE"
 ln -s "$SYMLINK_SOURCE" "$SYMLINK_HOME/.bashrc"
-if output="$(PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$SYMLINK_HOME" \
+if output="$(PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$SYMLINK_HOME" \
   USER=demo SHELL=/usr/bin/bash DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" \
   DOTFILES_BASHRC="$SYMLINK_HOME/.bashrc" DOTFILES_BACKUP_DIR="$BACKUP_DIR" \
   "$ROOT/modules/fish/post-install.sh" 2>&1)"; then
@@ -190,7 +190,7 @@ grep -Fqx '# managed elsewhere' "$SYMLINK_SOURCE"
 # leaving an unsafe Omarchy login-shell configuration behind.
 printf '#!/usr/bin/env bash\nprintf '\''demo:x:1000:1000::/tmp:%s\n'\'' "$(dirname -- "$0")/fish"\n' > "$OMARCHY_TEST_BIN/getent"
 chmod +x "$OMARCHY_TEST_BIN/getent"
-if output="$(PATH="$OMARCHY_TEST_BIN:/usr/bin:/bin" HOME="$OMARCHY_TEST_HOME" \
+if output="$(PATH="$OMARCHY_TEST_BIN:$TEST_SYSTEM_PATH" HOME="$OMARCHY_TEST_HOME" \
   USER=demo SHELL=/usr/bin/fish DOTFILES_OS_RELEASE="$OMARCHY_OS_RELEASE" \
   DOTFILES_BASHRC="$BASHRC" DOTFILES_BACKUP_DIR="$BACKUP_DIR" \
   "$ROOT/modules/fish/post-install.sh" 2>&1)"; then

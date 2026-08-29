@@ -3,6 +3,11 @@
 set -euo pipefail
 
 ROOT="${DOTFILES_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)}"
+# NixOS has no /bin/bash or /usr/bin/bash. Keep fixture PATHs isolated while
+# retaining the directory that provides the Bash used to launch the test suite.
+TEST_BASH_BIN="$(command -v bash)"
+TEST_SYSTEM_PATH="$(dirname -- "$TEST_BASH_BIN"):/usr/bin:/bin"
+export TEST_SYSTEM_PATH
 
 new_test_root() {
   TEST_ROOT="$(mktemp -d)"
