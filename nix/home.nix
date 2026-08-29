@@ -1,9 +1,11 @@
 { self }:
 
-{ pkgs, lib, ... }:
+{ config, pkgs, lib, ... }:
 
 let
   dotfilesPackages = self.packages.${pkgs.stdenv.hostPlatform.system};
+  dotfilesRoot = "${config.home.homeDirectory}/dotfiles";
+  outOfStoreSymlink = config.lib.file.mkOutOfStoreSymlink;
   sqliteLibrary =
     "${pkgs.sqlite.out}/lib/libsqlite3${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}";
   neovimWithSqlite = pkgs.symlinkJoin {
@@ -83,10 +85,12 @@ in
     enable = true;
     generateCompletions = false;
 
-    # Fish loads conf.d before config.fish. Keeping this repository entry point
-    # in shellInit preserves that ordering while Home Manager still owns its
-    # generated config.fish and session variables.
-    shellInit = builtins.readFile (self.outPath + "/configs/fish/config.fish");
+    # Home Manager keeps ownership of the generated config.fish so it can load
+    # session variables. The actual Fish entry point stays live in the dotfiles
+    # checkout and still runs after every conf.d snippet.
+    shellInit = ''
+      source "${dotfilesRoot}/configs/fish/config.fish"
+    '';
   };
 
   # Keep the LXGW font scoped to Alacritty instead of changing the desktop's
@@ -102,20 +106,17 @@ in
     };
   };
 
-  # These are the same files used by the Bash installer on Arch Linux and
-  # macOS. Homebrew and version-manager fragments remain available there and
-  # are harmless no-ops on a Nix-native host when their commands are absent.
+  # Keep Fish's supporting configuration live in the same checkout as its
+  # config.fish entry point. This deliberately uses out-of-store links so edits
+  # made through ~/dotfiles apply to newly started shells without a rebuild.
   xdg.configFile."fish/conf.d" = {
-    source = self.outPath + "/configs/fish/conf.d";
-    recursive = true;
+    source = outOfStoreSymlink "${dotfilesRoot}/configs/fish/conf.d";
   };
   xdg.configFile."fish/functions" = {
-    source = self.outPath + "/configs/fish/functions";
-    recursive = true;
+    source = outOfStoreSymlink "${dotfilesRoot}/configs/fish/functions";
   };
   xdg.configFile."fish/completions" = {
-    source = self.outPath + "/configs/fish/completions";
-    recursive = true;
+    source = outOfStoreSymlink "${dotfilesRoot}/configs/fish/completions";
   };
 
   home.sessionPath = lib.mkAfter [ "$HOME/.local/bin" ];
