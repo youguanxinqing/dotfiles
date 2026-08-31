@@ -1,4 +1,4 @@
-# flash 的 y 复制后不关 picker：回到空搜索接着抓下一个，esc 手动退。
-# 默认（true）是复制即退，抓一个就走的场景少按一次 esc。
+# flash 的 y 复制后自动退出 picker（默认行为）。
+# 想连续抓多个再改回 false：复制后回到空搜索，esc 手动退。
 [flash]
-exit_on_yank = false
+exit_on_yank = true
