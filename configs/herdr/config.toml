@@ -295,17 +295,6 @@ type = "shell"
 command = 'printf "herdr_location: %s (herdr pane_id; control it via the herdr CLI, see: herdr --skill)" "$HERDR_ACTIVE_PANE_ID" | "${HOME}/.local/bin/g-copy" && "${HOME}/.local/bin/g-notify" --title "Copied" --message "herdr_location: $HERDR_ACTIVE_PANE_ID"'
 description = "copy pane location for AI"
 
-# 吞掉 ctrl+d，别让它落到 pane 里。herdr 自己没绑这个键（prefix 是 ctrl+b），
-# 关掉 agent 的是 agent 自己：Claude Code 把 ctrl+d 硬编码成 app:exit，
-# keybindings.json 里连 null 掉都不允许，所以只能在 herdr 这层截住。
-# 代价：shell pane 里的 EOF 也一起没了，退 shell 得打 exit。
-# type = "shell" 需要一个真命令，true 就是这里的 no-op。
-[[keys.command]]
-key = "ctrl+d"
-type = "shell"
-command = "true"
-description = "swallow ctrl+d so it never exits the agent"
-
 # agents 面板的 workspace 名默认恒定加粗（sidebar.rs 里未选中分支也 add_modifier(BOLD)），
 # spaces 面板未选中行则不加粗，两个面板看起来不是一套东西。去掉粗体对齐 spaces。
 # 代价：当前活跃的那行也不再加粗，靠背景高亮 + 更亮的前景色区分。
