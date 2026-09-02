@@ -1,0 +1,40 @@
+[
+	// tmux 风格分屏：新 pane 里是一个新的空 buffer，原文件留在原来那格。
+	// macOS 默认 keymap 里 ctrl+w 完全没有绑定，整个 ctrl+w 前缀是空的。
+	//
+	// 三步的理由：
+	// 1. new_file —— new_pane 单用是"把当前 sheet 搬到新 pane"，原来那格会被搬空。
+	//    先在当前 group 开一个空 buffer 并让它成为 active，new_pane 搬走的就是这个空的。
+	//    （换成 clone_file 就是 vim :vsplit 的语义 —— 两格同一个 buffer。）
+	// 2. set_max_columns —— new_pane 的方向完全由 max_columns 决定，没有 direction 参数。
+	//    2 = 先向右开列，1 = 只向下堆行。这个值是 window 级别且会粘住，
+	//    所以两个绑定都显式声明自己要的值，而不是依赖当前状态。
+	// 3. new_pane —— 建 pane、搬 sheet、focus 到新 pane 都由它做完，光标自动跟过去。
+	//
+	// 不要改成 set_layout + move_to_group：在同一个 chain 里 set_layout 新建的 group
+	// 对后一条命令还不可见，sheet 会留在原 group，只剩一个空 pane 抢走光标。
+	{
+		"keys": ["ctrl+w", "v"],
+		"command": "chain",
+		"args": { "commands": [["new_file"], ["set_max_columns", { "columns": 2 }], ["new_pane"]] }
+	},
+	{
+		"keys": ["ctrl+w", "s"],
+		"command": "chain",
+		"args": { "commands": [["new_file"], ["set_max_columns", { "columns": 1 }], ["new_pane"]] }
+	},
+
+	// 只有 forward/backward 两个方向可用，h/k 往回、j/l 往前。
+	{ "keys": ["ctrl+w", "h"], "command": "focus_neighboring_group", "args": { "forward": false } },
+	{ "keys": ["ctrl+w", "k"], "command": "focus_neighboring_group", "args": { "forward": false } },
+	{ "keys": ["ctrl+w", "j"], "command": "focus_neighboring_group" },
+	{ "keys": ["ctrl+w", "l"], "command": "focus_neighboring_group" },
+	{ "keys": ["ctrl+w", "w"], "command": "focus_neighboring_group" },
+
+	{ "keys": ["ctrl+w", "H"], "command": "move_to_neighboring_group", "args": { "forward": false } },
+	{ "keys": ["ctrl+w", "L"], "command": "move_to_neighboring_group" },
+
+	// x = 关掉当前 pane，对齐 tmux 的 prefix+x。
+	{ "keys": ["ctrl+w", "x"], "command": "close_pane" },
+	{ "keys": ["ctrl+w", "o"], "command": "set_layout", "args": { "cols": [0.0, 1.0], "rows": [0.0, 1.0], "cells": [[0, 0, 1, 1]] } },
+]
