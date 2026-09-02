@@ -25,7 +25,8 @@ new_test_root
 FISH_BIN="$(command -v fish)"
 TEST_BIN="$TEST_ROOT/bin"
 TEST_REPO="$TEST_ROOT/repo"
-mkdir -p "$TEST_BIN" "$TEST_REPO/child"
+TEST_HOME="$TEST_ROOT/home"
+mkdir -p "$TEST_BIN" "$TEST_REPO/child" "$TEST_HOME/.codex"
 
 for fish_file in "$ROOT"/configs/fish/config.fish \
   "$ROOT"/configs/fish/conf.d/*.fish "$ROOT"/configs/fish/functions/*.fish; do
@@ -102,15 +103,30 @@ git -C "$TEST_REPO" init -q
 REPO_ROOT="$(git -C "$TEST_REPO" rev-parse --show-toplevel)"
 printf '#!/usr/bin/env bash\nprintf '\''%%s\\n'\'' "$@" > "$CODEX_TEST_LOG"\n' > "$TEST_BIN/codex"
 chmod +x "$TEST_BIN/codex"
+printf 'model = "test"\n' > "$TEST_HOME/.codex/dotfiles.config.toml"
 
-PATH="$TEST_BIN:$TEST_SYSTEM_PATH" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
+PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
   CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
   "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex launch'
+grep -Fqx -- '--profile' "$TEST_ROOT/codex.log"
+grep -Fqx -- 'dotfiles' "$TEST_ROOT/codex.log"
 grep -Fqx -- '-c' "$TEST_ROOT/codex.log"
 grep -Fqx "projects.\"$REPO_ROOT\".trust_level=\"untrusted\"" "$TEST_ROOT/codex.log"
 
 mkdir "$TEST_REPO/.codex"
-PATH="$TEST_BIN:$TEST_SYSTEM_PATH" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
+PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
   CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
   "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex launch'
-[[ "$(cat "$TEST_ROOT/codex.log")" == launch ]]
+[[ "$(cat "$TEST_ROOT/codex.log")" == $'--profile\ndotfiles\nlaunch' ]]
+
+# 用户显式选择的 profile 不得与默认 profile 叠加。
+PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
+  CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
+  "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex --profile work launch'
+[[ "$(cat "$TEST_ROOT/codex.log")" == $'--profile\nwork\nlaunch' ]]
+
+# 管理子命令不接受 --profile，包装函数不能让它们变成错误调用。
+PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
+  CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
+  "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex --strict-config doctor'
+[[ "$(cat "$TEST_ROOT/codex.log")" == $'--strict-config\ndoctor' ]]

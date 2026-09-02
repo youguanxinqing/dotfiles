@@ -3,8 +3,8 @@
 # opus 是别名，跟最新的 Opus 走，不写死 claude-opus-5；
 # [1m] 后缀要的是 1M context 那个变体，光写 opus 拿到的是默认 200K。
 alias claude='claude --permission-mode auto --model "opus[1m]" --effort max'
-# codex 不需要 alias：model / reasoning effort 在 ~/.codex/config.toml，
-# 目录信任要在启动前算，见 functions/codex.fish
+# codex 不需要 alias：可移植偏好由 dotfiles profile 提供，目录信任也要
+# 在启动前计算；两件事都收口在 functions/codex.fish。
 
 # alias for git
 abbr -a gits "git status"
