@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# Make ~/.claude/skills a mirror of ~/.agents/skills.
+#
+# ~/.agents/skills is the cross-agent standard root: Codex reads it natively as
+# its USER scope, and `npx skills` installs there. Claude Code reads only
+# ~/.claude/skills and has no setting to add a path (anthropics/claude-code
+# #31005, #39403), so it needs a bridge. Symlinking the whole directory does not
+# work — agents write .system/ into the target — so the bridge is one symlink per
+# skill, which is what this recreates from scratch on every run.
+#
+# Mirroring in one direction, from one root, is the point: both agents end up
+# with the same skill set because Claude's view is derived rather than
+# maintained. A skill only has to land in ~/.agents/skills, by whatever route.
+set -euo pipefail
+
+SOURCE_ROOT="${SKILLS_SOURCE_ROOT:-$HOME/.agents/skills}"
+TARGET_ROOT="${SKILLS_TARGET_ROOT:-$HOME/.claude/skills}"
+DRY_RUN=0
+
+usage() {
+  cat <<'EOF'
+Usage: skills-mirror [-n|--dry-run]
+       skills-mirror --self-test
+
+Mirror every skill in ~/.agents/skills into ~/.claude/skills as a symlink, and
+drop mirror symlinks whose skill is gone. Real directories in the target are
+reported and left alone, never overwritten.
+
+Env: SKILLS_SOURCE_ROOT, SKILLS_TARGET_ROOT override either side.
+EOF
+}
+
+log() { [ "$DRY_RUN" -eq 1 ] && printf '+ %s\n' "$*" || printf '%s\n' "$*"; }
+
+mirror() {
+  local linked=0 relinked=0 current=0 unmanaged=0 pruned=0
+  local skill name target want
+
+  [ -d "$SOURCE_ROOT" ] || { echo "No skill root: $SOURCE_ROOT" >&2; exit 1; }
+  # A machine that has not run Claude Code yet has no ~/.claude/skills, and
+  # install.sh must not fail on that.
+  [ -d "$TARGET_ROOT" ] || [ "$DRY_RUN" -eq 1 ] || mkdir -p "$TARGET_ROOT"
+
+  for skill in "$SOURCE_ROOT"/*; do
+    [ -d "$skill" ] || continue
+    name="$(basename "$skill")"
+    case "$name" in .*) continue ;; esac
+    target="$TARGET_ROOT/$name"
+    want="$skill"
+
+    if [ -L "$target" ]; then
+      if [ "$(readlink "$target")" = "$want" ]; then
+        current=$((current + 1))
+        continue
+      fi
+      # Only rewrite links that already point into the skill root; a link
+      # aimed anywhere else is someone's deliberate choice.
+      case "$(readlink "$target")" in
+        "$SOURCE_ROOT"/* | ../../.agents/skills/*)
+          log "relink $name"
+          [ "$DRY_RUN" -eq 1 ] || ln -sfn "$want" "$target"
+          relinked=$((relinked + 1))
+          ;;
+        *)
+          echo "unmanaged link, left alone: $target -> $(readlink "$target")"
+          unmanaged=$((unmanaged + 1))
+          ;;
+      esac
+      continue
+    fi
+
+    if [ -e "$target" ]; then
+      echo "unmanaged path, left alone: $target"
+      unmanaged=$((unmanaged + 1))
+      continue
+    fi
+
+    log "link $name"
+    [ "$DRY_RUN" -eq 1 ] || ln -s "$want" "$target"
+    linked=$((linked + 1))
+  done
+
+  # A skill uninstalled from the root leaves a dangling mirror link behind.
+  # Dangling symlinks only: -e on a symlink follows it, so a live mirror and a
+  # real directory both survive this.
+  for target in "$TARGET_ROOT"/*; do
+    [ -L "$target" ] || continue
+    [ -e "$target" ] && continue
+    log "prune $(basename "$target")"
+    [ "$DRY_RUN" -eq 1 ] || rm "$target"
+    pruned=$((pruned + 1))
+  done
+
+  printf 'linked=%d relinked=%d already-current=%d pruned=%d unmanaged=%d\n' \
+    "$linked" "$relinked" "$current" "$pruned" "$unmanaged"
+}
+
+self_test() {
+  local src tgt
+  # Global, not local: the EXIT trap runs after this frame is gone, and it has
+  # to fire on the failure paths too.
+  TMP_FIXTURE="$(mktemp -d)"
+  trap 'rm -rf "$TMP_FIXTURE"' EXIT
+  # Not "home/": scripts/check-private.sh reads that as a personal path.
+  src="$TMP_FIXTURE/fake/.agents/skills"
+  tgt="$TMP_FIXTURE/fake/.claude/skills"
+  mkdir -p "$src/alpha" "$src/beta" "$src/.hidden" "$tgt"
+
+  # A real directory in the target must survive untouched.
+  mkdir -p "$tgt/beta"
+  # A dangling mirror link must be pruned.
+  ln -s "../../.agents/skills/gone" "$tgt/gone"
+  # A link to somewhere unrelated must survive untouched.
+  mkdir -p "$TMP_FIXTURE/elsewhere/custom"
+  ln -s "$TMP_FIXTURE/elsewhere/custom" "$tgt/custom"
+
+  # SOURCE_ROOT/TARGET_ROOT resolved from the env at load time, so point the
+  # already-resolved globals at the fixture rather than re-exporting.
+  SOURCE_ROOT="$src" TARGET_ROOT="$tgt" mirror >/dev/null
+
+  [ -L "$tgt/alpha" ] || { echo "FAIL: alpha not linked" >&2; exit 1; }
+  [ -d "$tgt/beta" ] && [ ! -L "$tgt/beta" ] || { echo "FAIL: real dir clobbered" >&2; exit 1; }
+  [ ! -e "$tgt/gone" ] && [ ! -L "$tgt/gone" ] || { echo "FAIL: dangling link kept" >&2; exit 1; }
+  [ -L "$tgt/custom" ] || { echo "FAIL: unrelated link pruned" >&2; exit 1; }
+  [ ! -e "$tgt/.hidden" ] || { echo "FAIL: dotfile mirrored" >&2; exit 1; }
+  echo "self-test ok"
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n|--dry-run) DRY_RUN=1 ;;
+    --self-test) self_test; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+mirror
