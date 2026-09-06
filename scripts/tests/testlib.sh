@@ -31,6 +31,14 @@ assert_link() {
   }
 }
 
+assert_regular_file() {
+  local target="$1"
+  [[ -f "$target" && ! -L "$target" ]] || {
+    echo "Expected regular file (not a link): $target" >&2
+    exit 1
+  }
+}
+
 assert_contains() {
   local haystack="$1" needle="$2"
   [[ "$haystack" == *"$needle"* ]] || {
