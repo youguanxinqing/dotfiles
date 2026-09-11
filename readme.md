@@ -180,8 +180,10 @@ modules/tool-d/home/.local/bin/tool-d-helper
 
 Every Git-visible file below `home/` is linked to the corresponding path below
 `$HOME`; a file added later is picked up on the next run automatically. Add a
-`[link <id>]` section only for an existing shared source or when a whole
-directory must be linked as one unit:
+`[link <id>]` section only for an existing shared source, when a whole
+directory must be linked as one unit, or when the target sits so deep that
+every file would have to repeat the path (`overlay` from one short module
+directory declares it once instead):
 
 ```ini
 [link config]
@@ -206,6 +208,12 @@ template = include {source}
 mode = copy
 source = configs/tool/config.toml
 target = ~/.config/tool/config.toml
+
+[link packages-user]
+platform = macos
+mode = overlay
+source = modules/sublime-text/packages-user
+target = ~/Library/Application Support/Sublime Text/Packages/User
 ```
 
 `tree` links one file or directory. `overlay` recursively links Git-visible

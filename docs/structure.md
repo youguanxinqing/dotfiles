@@ -29,7 +29,11 @@ keeps ignored logs, caches, credentials, and generated state out of the link
 set.
 
 `[link <id>]` sections in `module.ini` exist for stable shared sources such as
-the legacy `configs/` and `bin/` trees. Use `tree` when the application expects
+the legacy `configs/` and `bin/` trees, and for targets deep enough that the
+`home/` overlay would make every file re-spell the path — Sublime's
+`~/Library/Application Support/Sublime Text/Packages/User` is five levels down,
+so the module overlays `modules/sublime-text/packages-user` and names the target
+once. Use `tree` when the application expects
 a complete directory and does not write runtime state inside it. Use `overlay`
 when tracked config and untracked runtime state must coexist.
 
