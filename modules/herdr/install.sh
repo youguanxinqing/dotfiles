@@ -25,10 +25,14 @@ AkashJana18/herdr-scratch|main|herdr.scratch
 ntindle/herdr-resurrect|main|ntindle.herdr-resurrect
 rmarganti/herdr-pluck|v0.3.1|rmarganti.herdr-pluck
 youguanxinqing/herdr-flash|main|youguanxinqing.herdr-flash
+youguanxinqing/herdr-hop|main|youguanxinqing.herdr-hop
 '
 # 关于上面的 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
 # main 已经跑在 v1.0.1 tag 前面了 —— 写 v1.0.1 反而会把新机器装回更旧的代码。
-# resurrect 和 herdr-flash 都没发过 tag，只能跟 main。
+# resurrect、herdr-flash、herdr-hop 都没发过 tag，只能跟 main。
+#
+# herdr-hop 要 cargo 编（manifest 的 build 就是 cargo build --release，上游还没发
+# 预编译包）。rustup/cargo 模块的 order 是 10/20，herdr 是 90，新机器上先有 cargo。
 
 # 本地插件：manifest 就在仓库里，用 plugin link 指过去而不是从 GitHub 装 ——
 # 可执行文件都是 bin/ 那份（modules/bin 已经链到 ~/.local/bin），插件目录里
@@ -65,6 +69,9 @@ apply_plugin() {
   # herdr-flash 在开发机上是 plugin link 到源码仓库的（改代码不用重装，见
   # docs/dependencies.md）。local 链接视为已满足：check 不红，install 也不会
   # 把 dev link 顶掉换成 GitHub 安装。clean 不豁免，照常卸。
+  #
+  # 这条豁免也意味着：想让某个插件从 dev link 换回 GitHub 安装，install.sh 不会
+  # 替你做，得先 `herdr plugin unlink <id>`（herdr-hop 就是这么切过去的）。
   if [[ "$ACTION" != clean && "$line" == *" enabled "* && "$line" == *"[local:"* ]]; then
     [[ "$ACTION" != install ]] || echo "Already linked (dev): $id"
     return 0

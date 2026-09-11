@@ -1,4 +1,10 @@
 onboarding = false
+
+# prefix+q 的 herdr-hop 把 pane 标号画成 Kitty graphics 大数字（manifest 里写的
+# "native Kitty-graphics overlays"），不开这个它没有画布。
+[experimental]
+kitty_graphics = true
+
 [ui]
 # "priority" = attention queue（要人管的排前面），不再按 workspace 分组。
 # 同时挂 10 个 agent 时，按 space 分组等于要自己扫一遍找哪个在等我。
@@ -110,18 +116,16 @@ width = "60%"
 height = "50%"
 description = "fuzzy jump to tab"
 
-# tmux display-panes 的等价物：列出当前 tab 的 pane，按一个数字跳过去。
+# tmux display-panes 的等价物：自研 herdr-hop（kitty graphics 大数字叠在活 pane 上，
+# 按标号即 pane.focus）。Rust 单进程，cell size 走 pane 自查 \x1b[16t，边开 herdr 边装即可用。
+# 中间的小方片是 herdr 收键 popup 的硬边框（最小 6x4、删不掉），保持空白不装饰（画内容会闪）。
+# 插件由 modules/herdr/install.sh 从 github.com/youguanxinqing/herdr-hop 装（无 tag，
+# 跟 main），本机也走 GitHub 而不是 dev link —— 理由见 docs/dependencies.md。
 [[keys.command]]
 key = "prefix+q"
-type = "popup"
-# 写死成格子数而不是百分比：百分比在大屏上会撑出一个几乎全空的大框。
-# 实测可画行数 = height - 3（上下边框 + 顶部内边距各一行，再留一行防换行顶屏）。
-# 10 => 7 行，够放见过的最多 6 个 pane；再多脚本会自己滚动，不会画到框外面去。
-# 宽度和脚本里的 WIDTH 对齐。
-command = "${HOME}/.local/bin/herdr-pane-jump"
-width = 56
-height = 10
-description = "display panes and jump"
+type = "plugin_action"
+command = "youguanxinqing.herdr-hop.jump"
+description = "hop: jump to a visible pane by label"
 
 # grep-nvim: fzf + ripgrep live-grep，回车在右边 split 里用 nvim 打到那一行，退出自动收掉。
 [[keys.command]]

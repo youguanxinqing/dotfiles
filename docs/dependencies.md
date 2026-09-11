@@ -25,7 +25,7 @@ The fix is `modules/herdr/install.sh`, using the module's `script` dependency
 and implementing `check` / `install` / `clean`. Follow that pattern for
 anything else where config points outside the repo.
 
-## Our own plugin: dev link on this machine, GitHub everywhere else
+## Our own plugins: dev link on this machine, GitHub everywhere else
 
 `youguanxinqing.herdr-flash` (bound to `prefix+s`) is developed in
 `~/Projects/herdr-pluck-flash` and `herdr plugin link`ed from there on this
@@ -34,6 +34,18 @@ machine, so `herdr plugin list` shows `[local:...]` instead of a GitHub ref.
 installs it from GitHub (no tag published yet, so it tracks `main`), and it
 treats an enabled `[local:]` line as satisfied so a rerun here never replaces
 the dev link with a GitHub install.
+
+`youguanxinqing.herdr-hop` (bound to `prefix+q`) is the same kind of plugin but
+runs the other way round: it is installed from GitHub on this machine too, so
+every machine runs the published `main`. The source checkout stays in
+`~/Projects/herdr-panes` — the directory predates the rename to `herdr-hop` —
+but it is no longer linked, so editing it changes nothing until the change is
+pushed and the plugin reinstalled. That is the tradeoff for one source of truth;
+switch it back to a dev link while iterating on the plugin itself.
+
+The `[local:]` exemption is one-directional: it keeps a rerun from clobbering a
+dev link, and therefore will not migrate a dev link back to GitHub either. Do
+that by hand with `herdr plugin unlink <id>`, then rerun the module.
 
 ## A platform can need a native integration, not just a different package
 
@@ -88,3 +100,4 @@ Running `herdr plugin list | grep -q` once per plugin under-reports. `grep -q`
 exits on first match and closes the pipe, and after a few SIGPIPEs in a row
 herdr reports installed plugins as missing. Query once into a variable, then
 match against that.
+
