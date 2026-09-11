@@ -227,10 +227,16 @@ description = "worktree dialog (open or create)"
 # herdr-scratch session 里，prefix+q 收起来只是脱离浮层，进程和滚动历史都还在，
 # 再按 prefix+p 原样回来。默认 workspace 作用域，每个 workspace 一个自己的 scratchpad。
 # 内建的 type = "popup" 做不到这个：命令退出即销毁。
+#
+# 不直接绑 plugin_action：backing session 的 server 一重启，恢复出来的 pane_id 不变
+# 但 terminal_id 全换一批，而插件只验 pane_id 就把存下来的旧 terminal_id 交给 popup
+# 去 attach，attach 立刻失败退 1 —— 表现是 popup 一闪就没。herdr-scratch-resync
+# 在 toggle 之前把 registry 对齐活 pane，理由写在脚本头上。
+# 用 `;` 不用 `&&`：resync 自己出问题也不该把这个键卡死。
 [[keys.command]]
 key = "prefix+p"
-type = "plugin_action"
-command = "herdr.scratch.toggle"
+type = "shell"
+command = '"${HOME}/.local/bin/herdr-scratch-resync"; "${HERDR_BIN_PATH:-herdr}" plugin action invoke toggle --plugin herdr.scratch'
 description = "toggle scratchpad"
 
 # Pluck: 镜像当前可见画面，给路径、URL、SHA、IP 等 token 标短 hint，选中即复制。

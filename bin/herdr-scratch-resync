@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# 把 herdr.scratch 的 registry 里存的 terminal_id 对齐 backing session 里的活 pane。
+# 在 prefix+p 的 toggle 之前跑（见 configs/herdr/config.toml）。
+#
+# 为什么需要：插件把 {pane_id, terminal_id} 一起存进 registry.json，show_handle 只用
+# `pane get` 验 pane_id 还在，就把存下来的 terminal_id 交给 popup 去 attach
+# （src/herdr.rs handle_get / show_handle）。backing session 的 server 一重启，
+# 恢复出来的 pane_id 不变、terminal_id 全换一批，于是 attach 拿着不存在的 terminal
+# 立刻失败退 1 —— 表现就是 popup 一闪就没。2026-08-31 手改过一次 registry，
+# 重启之后又复现，所以改成每次开之前对齐。
+#
+# pane 也没了的条目把 handle 清掉、status 落回 closed，让 toggle 重建一个，
+# 而不是继续拿死 handle 闪。
+set -euo pipefail
+
+# HERDR_BIN_PATH 在 herdr 原地升级后会带 " (deleted)" 后缀。
+herdr="${HERDR_BIN_PATH:-herdr}"
+herdr="${herdr% (deleted)}"
+
+session="${HERDR_SCRATCH_SESSION:-herdr-scratch}"
+# 插件作为 plugin action 跑时由 server 注入 HERDR_PLUGIN_STATE_DIR；这个脚本是
+# type = "shell"，拿不到，按 herdr 自己的默认值兜底。
+state_dir="${HERDR_PLUGIN_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/herdr/plugins/herdr.scratch}"
+registry="$state_dir/registry.json"
+
+[[ -f "$registry" ]] || exit 0
+
+# server 没起时 herdr 仍然退 0，只是返回 {"error": ...}。这时什么都不改：
+# toggle 会自己把 backing server 拉起来，那之后的 terminal_id 本来就是新的。
+panes=$("$herdr" --session "$session" pane list 2>/dev/null) || exit 0
+jq -e 'has("result")' >/dev/null 2>&1 <<<"$panes" || exit 0
+
+# ponytail: 不抢 registry.lock。这个脚本只在 toggle 之前同步跑一次，
+# 写入本身是 rename 原子的；真要并发写，插件那侧的 flock 也拦不住外部进程。
+tmp="$registry.resync.$$"
+trap 'rm -f "$tmp"' EXIT
+
+jq --argjson live "$panes" '
+  ([($live.result.panes // [])[] | {(.pane_id): .terminal_id}] | add // {}) as $t
+  | .scratchpads |= with_entries(
+      if .value.handle.pane_id == null then .
+      elif $t[.value.handle.pane_id] == null then
+        (.value.handle = null | .value.status = "closed")
+      else .value.handle.terminal_id = $t[.value.handle.pane_id]
+      end)
+' "$registry" >"$tmp"
+
+# 没变化就不落盘：这个脚本每按一次 prefix+p 都跑，别白改 mtime。
+if ! cmp -s "$tmp" "$registry"; then
+  mv "$tmp" "$registry"
+  echo "herdr-scratch: resynced registry handles against session $session"
+fi
