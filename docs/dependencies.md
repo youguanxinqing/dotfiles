@@ -55,13 +55,25 @@ sidebar (`prefix+e`) and the file picker (`prefix+o`); it is declared in
 those keys. The nvim half owns annotations — comment a line in the sidebar,
 send every comment to an agent with `file:line`, repo and branch attached — and
 it lives in `lua/custom/plugins.lua` of a different repo,
-`youguanxinqing/nvim`. Nothing here installs it.
+`youguanxinqing/nvim`.
 
-So a new machine has a working sidebar and dead `<leader>a*` keys until that
-repo is cloned too, and the failure is silent: the keys simply do nothing. Do
-not debug it here. `modules/herdr/install.sh` and the `prefix+e` comment in
+That repo is not vendored here — it is a NvChad fork with its own history and
+remote, and copying it in would merge two histories. `modules/neovim` clones it
+to `~/.config/nvim` instead, through the same `script` dependency pattern the
+herdr plugins use. So a new machine does get both halves, but only at one
+remove: this repo owns *that the config is present*, and that config owns which
+nvim plugins exist. Nothing here can pin the herdr-nvim spec itself.
+
+The consequence to remember is the ordering. A clone is not a loaded plugin:
+lazy.nvim bootstraps on the first `nvim` launch, so between `install.sh`
+finishing and that first launch the sidebar works and every `<leader>a*` is
+dead, silently. `modules/herdr/install.sh` and the `prefix+e` comment in
 `configs/herdr/config.toml` both say where the other half is; keep those
 pointers accurate if either side moves.
+
+`modules/neovim/install.sh` will not touch an existing `~/.config/nvim` it does
+not recognise, and `clean` never deletes it — that directory is a repo that can
+hold unpushed commits, so removing it is destruction, not cleanup.
 
 Three things on the nvim side, all found by installing it:
 
