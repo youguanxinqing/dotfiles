@@ -47,6 +47,33 @@ The `[local:]` exemption is one-directional: it keeps a rerun from clobbering a
 dev link, and therefore will not migrate a dev link back to GitHub either. Do
 that by hand with `herdr plugin unlink <id>`, then rerun the module.
 
+## A capability can straddle two repos, and the manifest only covers one
+
+`chmarax.herdr-nvim` is two plugins with one name. The herdr half owns the nvim
+sidebar (`prefix+e`) and the file picker (`prefix+o`); it is declared in
+`modules/herdr/install.sh` like every other herdr plugin, so a new machine gets
+those keys. The nvim half owns annotations — comment a line in the sidebar,
+send every comment to an agent with `file:line`, repo and branch attached — and
+it lives in `lua/custom/plugins.lua` of a different repo,
+`youguanxinqing/nvim`. Nothing here installs it.
+
+So a new machine has a working sidebar and dead `<leader>a*` keys until that
+repo is cloned too, and the failure is silent: the keys simply do nothing. Do
+not debug it here. `modules/herdr/install.sh` and the `prefix+e` comment in
+`configs/herdr/config.toml` both say where the other half is; keep those
+pointers accurate if either side moves.
+
+Two traps on the nvim side, both found by installing it:
+
+- That config sets `defaults = { lazy = true }`, so upstream's
+  `{ "ChmaraX/herdr-nvim", opts = {} }` never loads — no event, no command, no
+  keys means lazy.nvim has nothing to trigger on. The spec needs explicit
+  `cmd` / `keys`.
+- Its default prefix is `<leader>a`, which `folke/sidekick.nvim` already used
+  for `<leader>ac` and `<leader>as`. Sidekick moved to `<leader>ak` /
+  `<leader>aK`. The two plugins are not redundant: sidekick runs an agent
+  inside nvim, herdr-nvim annotates for an agent running in a herdr pane.
+
 ## A platform can need a native integration, not just a different package
 
 Fish is the example. macOS can use the shared Homebrew adapter, while Linux

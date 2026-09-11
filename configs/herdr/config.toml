@@ -280,6 +280,32 @@ type = "plugin_action"
 command = "nvim-here.paste"
 description = "paste nvim's open file into the agent input"
 
+# chmarax.herdr-nvim：常驻 nvim sidebar（每个 tab 各一份，关掉再开回到原来的
+# buffer 和光标），配一个按「agent 刚改过」排序、带 diff stats 的文件选择器。
+# 和上面 prefix+y 的方向相反：nvim-here 是从 herdr 问 nvim「你开着哪个文件」，
+# 这个是从 herdr 把文件推进 nvim。
+#
+# 这个插件真正不可替代的是第三件事 —— annotation：在 sidebar 的 nvim 里对着代码行
+# 写批注，一次发给 agent，路径/行号/repo/branch 由插件填。但那半边是 nvim 插件，
+# 声明在另一个仓库 youguanxinqing/nvim 的 lua/custom/plugins.lua，不在本仓库的
+# 清单里。下面这两个键只依赖 herdr 这半边，那个仓库没拉下来它们照样能用；
+# 反过来 <leader>a* 不响应不是这里的问题，去查那个仓库。
+#
+# 键位：prefix+e / prefix+o 原本就空着，没从任何人手里抢。
+# 插件自己的配置（sidebar 位置、picker 扫多少行）在 ~/.config/herdr-nvim/config.toml，
+# 目前全走默认，没有一项值得进仓库。自检：herdr-nvim doctor。
+[[keys.command]]
+key = "prefix+e"
+type = "plugin_action"
+command = "chmarax.herdr-nvim.toggle"
+description = "toggle the nvim sidebar"
+
+[[keys.command]]
+key = "prefix+o"
+type = "plugin_action"
+command = "chmarax.herdr-nvim.pick-file"
+description = "open file from agent output in nvim"
+
 # 跳到下一个 blocked / done 的 agent，连按循环。working / idle 的一律不跳 ——
 # 内建 next_agent 会把它们一起轮进来，挂 10 个的时候要多按好几下。
 [[keys.command]]

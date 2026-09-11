@@ -26,6 +26,7 @@ ntindle/herdr-resurrect|main|ntindle.herdr-resurrect
 rmarganti/herdr-pluck|v0.3.1|rmarganti.herdr-pluck
 youguanxinqing/herdr-flash|main|youguanxinqing.herdr-flash
 youguanxinqing/herdr-hop|main|youguanxinqing.herdr-hop
+ChmaraX/herdr-nvim|v1.0.0|chmarax.herdr-nvim
 '
 # 关于上面的 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
 # main 已经跑在 v1.0.1 tag 前面了 —— 写 v1.0.1 反而会把新机器装回更旧的代码。
@@ -33,6 +34,12 @@ youguanxinqing/herdr-hop|main|youguanxinqing.herdr-hop
 #
 # herdr-hop 要 cargo 编（manifest 的 build 就是 cargo build --release，上游还没发
 # 预编译包）。rustup/cargo 模块的 order 是 10/20，herdr 是 90，新机器上先有 cargo。
+#
+# herdr-nvim 在这里只装了一半。sidebar（prefix+e）和 file picker（prefix+o）归这个
+# 插件；annotation —— 在 nvim 里对着代码行写批注、连 file:line/repo/branch 发给
+# agent —— 归 nvim 那半边，声明在另一个仓库 youguanxinqing/nvim 的
+# lua/custom/plugins.lua 里。本仓库的清单表达不了那半边：新机器跑完 install.sh，
+# prefix+e/prefix+o 是活的，<leader>a* 是死的，直到那个 nvim 配置仓库也拉下来。
 
 # 本地插件：manifest 就在仓库里，用 plugin link 指过去而不是从 GitHub 装 ——
 # 可执行文件都是 bin/ 那份（modules/bin 已经链到 ~/.local/bin），插件目录里
