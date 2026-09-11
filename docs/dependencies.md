@@ -109,6 +109,25 @@ other adapters. Extending source verification beyond Homebrew would require
 installer-specific checks; pinning versions would need a `min_version` key in
 dependency sections.
 
+## A cask whose command lives inside the .app cannot be declared as one
+
+Sublime Text's `subl` only exists at
+`/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl`. The Homebrew
+cask has a `binary` stanza that symlinks it into `$HOMEBREW_PREFIX/bin`, so
+`installer = brew-cask` with `command = subl` passes on a machine where brew
+installed the app -- and can never pass on one where the app was dragged in from
+the website. There, `brew_has cask` is false too, so a rerun tries to install
+the cask over the existing app and the module fails before any hook could fix
+it.
+
+`modules/sublime-text/install.sh` is a script dependency instead: it installs
+the cask only when no app bundle is present, then links
+`~/.local/bin/subl` at the bundle's binary and checks that link. The result is
+the same on both kinds of machine, and `subl` no longer depends on who
+installed Sublime. An unmanaged `~/.local/bin/subl` is reported and left alone,
+and `clean` removes only the link -- uninstalling the editor is the human's
+call.
+
 ## A tool that upgrades itself needs a floor, not an equality
 
 `hclient-cli` ships its own `upgrade`, which replaces the binary with whatever
