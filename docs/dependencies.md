@@ -63,7 +63,7 @@ not debug it here. `modules/herdr/install.sh` and the `prefix+e` comment in
 `configs/herdr/config.toml` both say where the other half is; keep those
 pointers accurate if either side moves.
 
-Two traps on the nvim side, both found by installing it:
+Three things on the nvim side, all found by installing it:
 
 - That config sets `defaults = { lazy = true }`, so upstream's
   `{ "ChmaraX/herdr-nvim", opts = {} }` never loads — no event, no command, no
@@ -73,6 +73,12 @@ Two traps on the nvim side, both found by installing it:
   for `<leader>ac` and `<leader>as`. Sidekick moved to `<leader>ak` /
   `<leader>aK`. The two plugins are not redundant: sidekick runs an agent
   inside nvim, herdr-nvim annotates for an agent running in a herdr pane.
+- The sent prompt opens with a hardcoded `Code review comments from my editor`
+  and `setup()` has no option for it, so the spec wraps `prompt.format` to ask
+  for the intent before each send. That wrapper matches the upstream header
+  literally: if a later version rewords it, the substitution silently no-ops
+  and every send goes out framed as a code review again, with no error. Recheck
+  it when bumping the ref.
 
 ## A platform can need a native integration, not just a different package
 
