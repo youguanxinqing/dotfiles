@@ -1,0 +1,4 @@
+[
+	{ "caption": "Format It", "command": "format_it" },
+	{ "caption": "Markdown Comment It", "command": "markdown_comments" },
+]

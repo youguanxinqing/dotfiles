@@ -147,3 +147,13 @@ exits on first match and closes the pipe, and after a few SIGPIPEs in a row
 herdr reports installed plugins as missing. Query once into a variable, then
 match against that.
 
+## A GUI app's subprocess does not inherit your shell PATH
+
+Sublime's `Format It` command pipes SQL through `pg_format` (declared as
+`installer = brew` in `modules/sublime-text/module.ini`). A Sublime launched
+from the Dock or Spotlight inherits launchd's PATH -- roughly `/usr/bin:/bin` --
+so `shutil.which("pg_format")` finds nothing there while the same lookup
+succeeds in every terminal. The plugin therefore probes
+`/opt/homebrew/bin` and `/usr/local/bin` by absolute path first and falls back
+to PATH only for the `subl`-launched case. The same applies to any future
+editor plugin that shells out.

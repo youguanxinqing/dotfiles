@@ -13,6 +13,30 @@ migration hit this three times:
 - **Hammerspoon** — still holding the pre-rename `herdrToast`, so notifications
   fell back to terminal-notifier without complaint.
 
+## A watcher does not see through a symlink
+
+Sublime reloads a plugin when something changes in `Packages/User/`. Our files
+live there as symlinks into the repository, so editing the repository file
+produces no event in the watched directory and the old code keeps running --
+`format_it.py` had the fix on disk for six minutes while the editor still
+rejected the input it was written for.
+
+**Restarting Sublime is the only reload this repository has actually verified.**
+`hot_exit` defaults to `always`, so windows and unsaved buffers come back.
+Repointing the link with
+
+```
+./install.sh clean sublime-text && ./install.sh sublime-text
+```
+
+is worth trying first, but whether the watcher acts on it is unproven: APFS here
+does not update `atime`, so "did Sublime re-read this file" is not observable
+from outside, and no test since has separated the two.
+
+Editing through the deployed path (`~/Library/Application Support/Sublime
+Text/Packages/User/...`) does not help either -- it is the same symlink, so the
+write still lands in the repository directory the watcher is not looking at.
+
 ## Verify against a freshly started process
 
 - **tmux** — start a clean server on its own socket:
