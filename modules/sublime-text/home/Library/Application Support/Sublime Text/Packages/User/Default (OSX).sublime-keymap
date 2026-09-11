@@ -37,4 +37,18 @@
 	// x = 关掉当前 pane，对齐 tmux 的 prefix+x。
 	{ "keys": ["ctrl+w", "x"], "command": "close_pane" },
 	{ "keys": ["ctrl+w", "o"], "command": "set_layout", "args": { "cols": [0.0, 1.0], "rows": [0.0, 1.0], "cells": [[0, 0, 1, 1]] } },
+
+	// M-x 的手感：开命令面板，跟 shift+cmd+p 是同一个 overlay。
+	// 别改回 alt+x —— 试过了，macOS 上 Option+字母 先被文本输入系统消化成字符
+	//（option+x = ≈），Sublime 根本收不到这个事件，重启也没用。ST 自己的 macOS
+	// 默认 keymap 里一条 alt+<字母> 都没有，只有 alt+enter / alt+f2 这种。
+	// ctrl+x 在 macOS 上是空的：剪切走的是 cmd+x。
+	// overlay 名只能是 command_palette。写成 "command" 不会报错也不会弹框：
+	// show_overlay 收到不认识的 overlay 就静默返回，console 里照样打印
+	// command: show_overlay，然后按键掉进 AppKit 变成 no command for selector: noop:。
+	{ "keys": ["ctrl+x"], "command": "show_overlay", "args": { "overlay": "command_palette" } },
+	// 同一个命令面板，只是把 "Set Syntax: " 先填进去 —— 省掉右下角状态栏那个
+	// 要手动翻的语法菜单，直接打 json / rust 就切。text 不预填也能用，
+	// 但光搜 "json" 会混进 Preferences / Snippet 那些条目。
+	{ "keys": ["ctrl+s"], "command": "show_overlay", "args": { "overlay": "command_palette", "text": "Set Syntax: " } },
 ]
