@@ -26,7 +26,8 @@ _NOT_JSON = object()
 class FormatItCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         regions = [r for r in self.view.sel() if not r.empty()]
-        if not regions:
+        whole_buffer = not regions
+        if whole_buffer:
             regions = [sublime.Region(0, self.view.size())]
 
         # 先算完再动 buffer：格式化一半、原样留一半，比什么都没做更难收拾。
@@ -43,9 +44,10 @@ class FormatItCommand(sublime_plugin.TextCommand):
         for region, text, _ in reversed(results):
             self.view.replace(edit, region, text)
 
-        # 几段解出来不是同一类就别切语法，标错比不标更碍事。
+        # 几段解出来不是同一类就别切语法，标错比不标更碍事。选区同理：在 Go 文件里
+        # 格了一段 JSON 字面量，整个文件的语法不该跟着翻过去。
         kinds = set(kind for _, _, kind in results if kind)
-        if len(kinds) == 1:
+        if whole_buffer and len(kinds) == 1:
             self.view.assign_syntax(_SYNTAX[kinds.pop()])
 
 
