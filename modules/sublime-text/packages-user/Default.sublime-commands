@@ -1,4 +1,9 @@
 [
 	{ "caption": "Format It", "command": "format_it" },
 	{ "caption": "Markdown Comment It", "command": "markdown_comments" },
+	// 没选区就整个 buffer，有选区只动选区 —— 两条都是 newlines.py。
+	{ "caption": "Strip Newlines", "command": "strip_newlines" },
+	{ "caption": "Expand \\n", "command": "expand_newlines" },
+	// copy_path 是 Sublime 自带的，只挂在右键菜单上；这里只是把它放进命令面板。
+	{ "caption": "Absolute Path", "command": "copy_path" },
 ]
