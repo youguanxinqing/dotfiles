@@ -12,6 +12,17 @@ migration hit this three times:
   20, `compatible: no`, and all 12 CLI-backed keybinds dead.
 - **Hammerspoon** — still holding the pre-rename `herdrToast`, so notifications
   fell back to terminal-notifier without complaint.
+- **herdr's *other* server** — `herdr status` only reports the default session,
+  so it said `compatible: yes` while the `herdr-scratch` backing session, a
+  separate server up since Sep 2, was still on 0.8.2: protocol 20 against the
+  0.9.0 client's 22. The only symptom was `prefix+p` doing nothing. After a
+  herdr upgrade, check every row of `herdr session list`, not just the default
+  — `herdr --session <name> status` is what reveals
+  `private_protocol_compatible: no`, and `herdr plugin log list` records the
+  action that failed (`timed out starting backing Herdr session`).
+  Fixing it costs the session's contents: `herdr session stop herdr-scratch`
+  killed 25 shells, and their scrollback was already unreachable through the
+  mismatched protocol.
 
 ## A watcher does not see through a symlink
 
