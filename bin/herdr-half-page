@@ -1,0 +1,145 @@
+#!/usr/bin/env luajit
+--[[ ctrl+alt+u/d 滚半屏 —— herdr 没有这个动作，自己按 pane.scroll 算。
+
+原来的做法在 ghostty 那头：把 ctrl+alt+u/d 伪造成八个 SGR 滚轮事件
+（ESC[<64;1;999M），行号取 999 落在所有 pane 之外，吃 herdr「落空就滚当前焦点
+pane」的兜底。herdr 0.8.2 的 handle_terminal_wheel 确实有这条兜底（三级：pane_at
+-> pane_frame_at -> focused_runtime_in_workspace），0.9.0 重写成只剩第一级
+（src/client/shell/mouse.rs:2198，find(contains(inner_rect, point)) 且没有 else），
+落在 pane 外的滚轮直接丢弃，按键于是静默失效。
+
+herdr 到 0.9.0 也没有可绑定的滚动动作（KeybindAction 整个枚举只有 EditScrollback
+沾边），非模态的半屏只剩 socket API 的 pane.scroll 一条路。
+
+用 LuaJIT 不用 python：这个键会被按住连发，python3 每次起 13.9ms，luajit 2.2ms。
+socket 和 flock 都走 FFI 直接调 libc，不需要 luasocket。回包只要三个数字，
+用 pattern 抠比拖一个 JSON 库省事 —— 输入是 herdr 自己生成的，形状固定。
+
+pane.scroll 收的是绝对 offset_from_bottom，所以这里是 read-modify-write，而 herdr
+的 type = "shell" 是 detach 着起进程的。锁是给「单次调用耗时接近连发间隔」那一格
+兜底的：本地跑 4.6ms、连发最快 15ms，够不到；但 python 版 14ms 启动在 15ms 连发下
+实测 12 次只走 5 次（130 而不是 312），herdr --remote 走 SSH 时 socket 往返也会
+把耗时推回那个量级。锁按 pane 分，不同 pane 不互相等，代价是零。
+
+（别拿「同时轰 N 个进程」去量这个 —— 那样连 python 都能测出丢步，但键盘连发是按
+间隔排队的，从不同时发。30ms 间隔以上，无锁的 python 也是对的。）
+]]
+
+local ffi = require("ffi")
+
+ffi.cdef[[
+struct sockaddr_un { uint8_t sun_len; uint8_t sun_family; char sun_path[104]; };
+int socket(int domain, int type, int protocol);
+int connect(int s, const struct sockaddr_un *name, uint32_t namelen);
+long write(int fd, const void *buf, size_t nbyte);
+long read(int fd, void *buf, size_t nbyte);
+int close(int fd);
+int open(const char *path, int flags, ...);
+int flock(int fd, int operation);
+]]
+
+local AF_UNIX, SOCK_STREAM = 1, 1
+local O_CREAT_RDWR, LOCK_EX = 0x0202, 2 -- O_RDWR|O_CREAT = 0x0002|0x0200
+
+local function die(msg)
+  io.stderr:write("herdr-half-page: ", msg, "\n")
+  os.exit(1)
+end
+
+local function call(path, method, params)
+  local fd = ffi.C.socket(AF_UNIX, SOCK_STREAM, 0)
+  if fd < 0 then die("socket() failed") end
+
+  local addr = ffi.new("struct sockaddr_un")
+  addr.sun_family = AF_UNIX
+  if #path >= 104 then die("socket path too long: " .. path) end
+  ffi.copy(addr.sun_path, path)
+  if ffi.C.connect(fd, addr, ffi.sizeof(addr)) < 0 then
+    ffi.C.close(fd)
+    die("cannot reach the herdr server at " .. path)
+  end
+
+  local req = string.format('{"id":"half-page","method":"%s","params":%s}\n', method, params)
+  ffi.C.write(fd, req, #req)
+
+  -- 回包不带换行，服务端也不立刻关连接，所以读到「能认出 result 或 error」为止。
+  local buf, out = ffi.new("char[?]", 65536), {}
+  repeat
+    local n = ffi.C.read(fd, buf, 65536)
+    if n <= 0 then break end
+    out[#out + 1] = ffi.string(buf, n)
+    local so_far = table.concat(out)
+    if so_far:find('"scroll"', 1, true) or so_far:find('"error"', 1, true) then break end
+  until false
+  ffi.C.close(fd)
+
+  local reply = table.concat(out)
+  local err = reply:match('"message":"(.-)"')
+  if err then die(method .. ": " .. err) end
+  return reply
+end
+
+-- offset_from_bottom 往回看历史是增大，所以 up 加、down 减，两端夹住。
+-- 半屏取 viewport_rows // 2，和 herdr copy mode 自己那套一致
+-- （src/copy_mode.rs copy_mode_page_lines = height / 2）。
+local function target_offset(direction, offset, max_offset, viewport)
+  local step = math.max(1, math.floor(viewport / 2))
+  local want = offset + (direction == "up" and step or -step)
+  return math.max(0, math.min(want, max_offset))
+end
+
+local function self_check()
+  assert(target_offset("up", 0, 176, 52) == 26)
+  assert(target_offset("down", 0, 176, 52) == 0, "already at the bottom, stay put")
+  assert(target_offset("up", 170, 176, 52) == 176, "clamp to the oldest line")
+  -- 1 行高的 pane 不能算出 0 步，否则这个键彻底不动
+  assert(target_offset("up", 5, 10, 1) == 6)
+  assert(target_offset("down", 5, 10, 1) == 4)
+
+  -- open(2) 的可变参数 ABI 踩过坑：mode 没传对就会建出 mode 000 的锁文件，
+  -- 下一次 open 直接 EACCES。只有真的开一次才验得出来。
+  local path = "/tmp/herdr-half-page.self-check.lock"
+  os.remove(path)
+  local fd = ffi.C.open(path, O_CREAT_RDWR, ffi.cast("int", 0x1B6))
+  assert(fd >= 0, "open() failed on a fresh lock file")
+  assert(ffi.C.flock(fd, LOCK_EX) == 0, "flock() failed")
+  ffi.C.close(fd)
+  local again = ffi.C.open(path, O_CREAT_RDWR, ffi.cast("int", 0x1B6))
+  assert(again >= 0, "reopening the lock file failed -- mode was not passed through")
+  ffi.C.close(again)
+  os.remove(path)
+
+  print("ok")
+end
+
+local function main()
+  local arg1 = arg[1]
+  if arg1 == "--self-check" then return self_check() end
+  if arg1 ~= "up" and arg1 ~= "down" then
+    die("usage: herdr-half-page up|down | --self-check")
+  end
+
+  local pane = os.getenv("HERDR_ACTIVE_PANE_ID") or os.getenv("HERDR_PANE_ID")
+  if not pane then die("no HERDR_ACTIVE_PANE_ID in the environment") end
+  local sock = os.getenv("HERDR_SOCKET_PATH")
+    or (os.getenv("HOME") .. "/.config/herdr/herdr.sock")
+
+  local lock_path = "/tmp/herdr-half-page." .. pane:gsub(":", "-") .. ".lock"
+  local lock = ffi.C.open(lock_path, O_CREAT_RDWR, ffi.cast("int", 0x1B6)) -- 0o666
+  if lock < 0 then die("cannot open the lock file " .. lock_path) end
+  if ffi.C.flock(lock, LOCK_EX) < 0 then die("cannot lock " .. lock_path) end
+
+  local target = string.format('{"pane_id":"%s"}', pane)
+  local info = call(sock, "pane.get", target)
+  local offset = tonumber(info:match('"offset_from_bottom":(%d+)'))
+  local max_offset = tonumber(info:match('"max_offset_from_bottom":(%d+)'))
+  local viewport = tonumber(info:match('"viewport_rows":(%d+)'))
+  if not (offset and max_offset and viewport) then die("no scroll metrics for pane " .. pane) end
+
+  call(sock, "pane.scroll", string.format('{"pane_id":"%s","offset_from_bottom":%d}',
+    pane, target_offset(arg1, offset, max_offset, viewport)))
+
+  ffi.C.close(lock)
+end
+
+main()

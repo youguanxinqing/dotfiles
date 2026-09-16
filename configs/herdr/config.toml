@@ -68,6 +68,7 @@ focus_pane_right = ["prefix+l", "ctrl+alt+l"]
 # 在「刚才那个 pane」之间来回跳比按方向键更常用，方向键在 3~4 pane 的 tab 里才有意义。
 last_pane = "ctrl+alt+o"
 
+
 # prefix+alt+<数字> 跨 tab 跳到第 N 个 agent pane，N = 侧栏（prefix+b）里的行序。
 # 数字看不见，得自己数行；同 tab 内的 pane 用 prefix+q 那个带列表的更省事。
 focus_agent = "prefix+alt+1..9"
@@ -334,6 +335,27 @@ description = "copy pane location for AI"
 # agents 面板的 workspace 名默认恒定加粗（sidebar.rs 里未选中分支也 add_modifier(BOLD)），
 # spaces 面板未选中行则不加粗，两个面板看起来不是一套东西。去掉粗体对齐 spaces。
 # 代价：当前活跃的那行也不再加粗，靠背景高亮 + 更亮的前景色区分。
+# 滚半屏。herdr 到 0.9.0 都没有可绑定的滚动动作（KeybindAction 整个枚举只有
+# EditScrollback 沾边），所以走 shell 调 socket API 的 pane.scroll。原来这一对键在
+# ghostty 侧伪造滚轮事件，0.9.0 把「落在 pane 外就滚焦点 pane」的兜底删了之后静默
+# 失效 —— 前因后果和为什么用 LuaJIT 不用 python，写在 bin/herdr-half-page 头上。
+# 和 focus_pane 的 ctrl+alt+hjkl 同一层：直接按，不用 prefix。
+# type = "shell" 由 server 直接跑，PATH 不可靠，用 install.sh 发布的绝对路径。
+#
+# 想要整屏或者边翻边搜：prefix+[ 进 copy mode（herdr 支持但没写进 --default-config
+# 的键），里面 ctrl+u/ctrl+d 也是半屏、ctrl+b/ctrl+f 整屏、/ 搜索，代价是模态。
+[[keys.command]]
+key = "ctrl+alt+u"
+type = "shell"
+command = '"${HOME}/.local/bin/herdr-half-page" up'
+description = "scroll half a page up"
+
+[[keys.command]]
+key = "ctrl+alt+d"
+type = "shell"
+command = '"${HOME}/.local/bin/herdr-half-page" down'
+description = "scroll half a page down"
+
 [ui.sidebar.agents]
 rows = [
   ["state_icon", { token = "workspace", bold = false }, "tab"],
