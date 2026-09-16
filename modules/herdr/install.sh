@@ -27,6 +27,7 @@ rmarganti/herdr-pluck|v0.3.1|rmarganti.herdr-pluck
 youguanxinqing/herdr-flash|main|youguanxinqing.herdr-flash
 youguanxinqing/herdr-hop|main|youguanxinqing.herdr-hop
 ChmaraX/herdr-nvim|v1.0.0|chmarax.herdr-nvim
+martin-ro/herdr-next-agent|main|martinro.next-agent
 '
 # 关于上面的 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
 # main 已经跑在 v1.0.1 tag 前面了 —— 写 v1.0.1 反而会把新机器装回更旧的代码。
@@ -145,6 +146,21 @@ while IFS='|' read -r spec ref id; do
   [[ -n "${id:-}" ]] || continue
   apply_plugin "$spec" "$ref" "$id"
 done <<< "$PLUGINS"
+
+# Next Agent 0.2.0 is portable Python, but its manifest only declares Linux.
+# Keep the macOS compatibility fix across reinstalls until upstream adds it.
+if [[ "$ACTION" == install && $(uname -s) == Darwin ]]; then
+  python3 - <<'PY'
+import os
+from pathlib import Path
+root = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "herdr/plugins/github"
+for manifest in root.glob("martinro.next-agent-*/herdr-plugin.toml"):
+    source = manifest.read_text()
+    updated = source.replace('platforms = ["linux"]', 'platforms = ["linux", "macos"]')
+    if updated != source:
+        manifest.write_text(updated)
+PY
+fi
 
 for id in $LOCAL_PLUGINS; do
   apply_local_plugin "$id"

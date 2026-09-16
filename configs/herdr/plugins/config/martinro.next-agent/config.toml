@@ -1,0 +1,3 @@
+# Only blocked/done; never include ordinary idle or working agents.
+priority = ["blocked", "done"]
+scope = "all"

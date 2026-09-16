@@ -28,7 +28,14 @@ printf '%s\n' \
 chmod +x "$TEST_BIN/herdr"
 : > "$TEST_LOG"
 
-if PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HERDR_TEST_LOG="$TEST_LOG" \
+# Exercise the macOS manifest repair without touching installed user plugins.
+printf '#!/bin/sh\necho Darwin\n' > "$TEST_BIN/uname"
+chmod +x "$TEST_BIN/uname"
+manifest="$TEST_ROOT/config/herdr/plugins/github/martinro.next-agent-test/herdr-plugin.toml"
+mkdir -p "$(dirname "$manifest")"
+printf 'platforms = ["linux"]\n' > "$manifest"
+
+if PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HERDR_TEST_LOG="$TEST_LOG" XDG_CONFIG_HOME="$TEST_ROOT/config" \
   "$ROOT/modules/herdr/install.sh" install >/dev/null 2>&1; then
   echo "Herdr plugin installation ignored a failed plugin." >&2
   exit 1
@@ -39,6 +46,8 @@ grep -Fqx 'install rmarganti/herdr-pluck' "$TEST_LOG"
 grep -Fqx 'pluck source=1' "$TEST_LOG"
 grep -Fqx 'install youguanxinqing/herdr-flash' "$TEST_LOG"
 grep -Fqx 'install youguanxinqing/herdr-hop' "$TEST_LOG"
+grep -Fqx 'install martin-ro/herdr-next-agent' "$TEST_LOG"
+grep -Fqx 'platforms = ["linux", "macos"]' "$manifest"
 # 本地插件（manifest 在仓库里）走 plugin link，不是 plugin install。
 grep -Fqx 'link nvim-here' "$TEST_LOG"
 grep -Fqx 'link worktree-links' "$TEST_LOG"

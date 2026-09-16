@@ -131,7 +131,7 @@ if grep -Fq pbcopy "$ROOT/configs/tmux/tmux.conf"; then
   exit 1
 fi
 if grep -Eq 'terminal-notifier|notify-send|notificationToast|(^|[^[:alnum:]_])hs[[:space:]]+-' \
-  "$ROOT/bin/agent-done-toast" "$ROOT/bin/herdr-agent-attention"; then
+  "$ROOT/bin/agent-done-toast"; then
   echo "A notification caller still selects its own desktop backend." >&2
   exit 1
 fi

@@ -25,6 +25,19 @@ The fix is `modules/herdr/install.sh`, using the module's `script` dependency
 and implementing `check` / `install` / `clean`. Follow that pattern for
 anything else where config points outside the repo.
 
+## Herdr attention navigation
+
+`prefix+u` uses `martin-ro/herdr-next-agent`, configured for `blocked` and
+`done` only in `configs/herdr/plugins/config/martinro.next-agent/config.toml`.
+Version 0.2.0 fixes Herdr 0.9 navigation by focusing the pane and then its tab.
+Its manifest omits macOS; the installer adds that platform until upstream does.
+
+The plugin cycles server-reported candidates. Herdr 0.9's client-local Done
+state can differ from the API; this is not an exact mirror of sidebar colours.
+Empty-queue toasts are suppressed by our `[ui.toast] delivery = "off"` setting.
+The sidebar retains native `priority` sorting. If an old Agent Inbox session
+still shows `Inbox`, clear its transient override with `agent.view.clear`.
+
 ## Our own plugins: dev link on this machine, GitHub everywhere else
 
 `youguanxinqing.herdr-flash` (bound to `prefix+s`) is developed in
