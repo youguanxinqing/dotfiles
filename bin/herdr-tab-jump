@@ -18,11 +18,16 @@ if [ -n "$err" ]; then
   exit 1
 fi
 
+# 屏幕上从上往下读：workspace 名升序、tab 编号降序；workspace_id 兜底，免得同名 workspace 的 tab 交错。
+# fzf 默认布局把第一行放在最底下贴着 prompt、光标也停在那，所以喂进去之前整体 reverse。
+# --no-sort: 否则输入后同分项按行长排，idle 比 working 短，会跑到前面。
 sel=$(jq -rs '(.[0].result.workspaces | map({(.workspace_id): .label}) | add) as $ws
-      | .[1].result.tabs[]
+      | .[1].result.tabs
+      | map(.ws = ($ws[.workspace_id] // .workspace_id))
+      | sort_by((.ws | ascii_downcase), .workspace_id, -.number) | reverse[]
       | [.tab_id, (if .focused then "*" else " " end) + (.number|tostring),
-         ($ws[.workspace_id] // .workspace_id), .label, .agent_status] | @tsv' <<<"$out" \
+         .ws, .label, .agent_status] | @tsv' <<<"$out" \
   | column -t -s "$(printf '\t')" \
-  | fzf --prompt='tab> ' --header='enter 聚焦 / esc 取消' --no-multi) || exit 0
+  | fzf --prompt='tab> ' --header='enter 聚焦 / esc 取消' --no-multi --no-sort) || exit 0
 
 herdr tab focus "${sel%% *}"
