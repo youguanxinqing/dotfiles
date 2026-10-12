@@ -50,7 +50,10 @@ function codex
         and not string match -qr '^(-p.+|--profile=)' -- $argv
         and test "$profile_supported" = true
         and test -f "$codex_config_home/dotfiles.config.toml"
-        set profile_args --profile dotfiles
+        # /permissions 选预设会把 approvals_reviewer 写回 profile（选 Full Access 写成
+        # user），sandbox 那一半却不落盘，于是之后每次启动都变成逐条问人。会话层的
+        # -c 压过 profile，会话内照样能切换。
+        set profile_args --profile dotfiles -c 'approvals_reviewer="auto_review"'
     end
 
     # --cd 会改变真正的项目根；奇异路径也不适合拼进 TOML key。

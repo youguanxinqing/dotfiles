@@ -158,16 +158,16 @@ mkdir "$TEST_REPO/.codex"
 PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
   CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
   "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex launch'
-[[ "$(cat "$TEST_ROOT/codex.log")" == $'--profile\ndotfiles\nlaunch' ]]
+[[ "$(cat "$TEST_ROOT/codex.log")" == $'--profile\ndotfiles\n-c\napprovals_reviewer="auto_review"\nlaunch' ]] || die "Default Codex launch must pin the approvals reviewer."
 
 # 用户显式选择的 profile 不得与默认 profile 叠加。
 PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
   CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
   "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex --profile work launch'
-[[ "$(cat "$TEST_ROOT/codex.log")" == $'--profile\nwork\nlaunch' ]]
+[[ "$(cat "$TEST_ROOT/codex.log")" == $'--profile\nwork\nlaunch' ]] || die "An explicit Codex profile must not get the default profile args."
 
 # 管理子命令不接受 --profile，包装函数不能让它们变成错误调用。
 PATH="$TEST_BIN:$TEST_SYSTEM_PATH" HOME="$TEST_HOME" CODEX_TEST_LOG="$TEST_ROOT/codex.log" \
   CODEX_FUNCTION="$ROOT/configs/fish/functions/codex.fish" CODEX_REPO="$TEST_REPO" \
   "$FISH_BIN" --no-config -c 'source "$CODEX_FUNCTION"; cd "$CODEX_REPO/child"; codex --strict-config doctor'
-[[ "$(cat "$TEST_ROOT/codex.log")" == $'--strict-config\ndoctor' ]]
+[[ "$(cat "$TEST_ROOT/codex.log")" == $'--strict-config\ndoctor' ]] || die "Codex management commands must not get profile args."
