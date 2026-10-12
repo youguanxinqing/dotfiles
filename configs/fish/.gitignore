@@ -1,10 +1,11 @@
-fish_variables
+fish_variables*
 
 # completions
 docker.fish
 kubectl.fish
 orbctl.fish
 bun.fish
+copilot.fish
 
 # functions
 pt.fish
