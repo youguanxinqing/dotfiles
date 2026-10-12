@@ -54,9 +54,18 @@ fail() {
 }
 
 cwd="${HERDR_ACTIVE_PANE_CWD:-}"
+# 弹窗和 shell 绑定都由 herdr 把这个塞进环境；CLI（create/open 子命令、测试）没有，
+# 那边继续按 cwd 算 —— 从别的仓库里跑 herdr-worktree create 不该跟着当前焦点走。
+active_ws="${HERDR_ACTIVE_WORKSPACE_ID:-}"
 # __list 的 cwd 由调用方用 $4 给死，不必为了推它再 exec 一次 herdr
 if [ -z "$cwd" ] && [ "$mode" != '__list' ]; then
   cwd="$("$herdr" pane current 2>/dev/null | jq -r '.result.pane.cwd // empty' || true)"
+fi
+# 环境里没有就问 herdr 要焦点 workspace，但只在对话框模式下问：人按键的时候「焦点
+# workspace」就是他看着的那个，而 create/open 是 CLI，跟着焦点走会建到别的仓库里去。
+if [ -z "$active_ws" ] && [ "$mode" = 'dialog' ]; then
+  active_ws="$("$herdr" pane current 2>/dev/null |
+    jq -r '.result.pane.workspace_id // empty' || true)"
 fi
 [ -n "$cwd" ] || cwd="$PWD"
 repo_root=''
@@ -77,6 +86,20 @@ repo_root=''
 # 相对路径的 gitdir（git 2.48 的 --relative-paths）、GIT_DIR 覆盖，都走那条。
 resolve_repo_root() {
   local d="$cwd" line common
+  # 仓库跟着 workspace 走，不跟着 pane 的 cwd。pane 会跑出去：agent 把它 cd 到别的仓库、
+  # 笔记库、/tmp 都算常态，而人按这个键想看的是手上这个 workspace 的 worktree。跟着 cwd
+  # 走的后果是列出另一个仓库的 worktree（甚至一个都没有），建也建到那个仓库里去 ——
+  # 在一个 git init 过没提交过的笔记库上就是 "invalid reference: HEAD"。
+  # herdr 自己也是这么算的：worktree list --workspace 回来的 source.repo_root 就是主
+  # checkout，从 linked worktree 的 workspace 问也一样。workspace 不在 git work tree 里
+  # （纯笔记那种 workspace）herdr 会报错，这时退回下面按 cwd 找。
+  # 名字不叫 ws：dialog() 里有个同名 local（选中行带的 workspace），bash 是动态作用域，
+  # 撞上就是从 dialog 调进来时读到那个空的 local（set -u 下直接 unbound variable）。
+  if [ -n "$active_ws" ]; then
+    repo_root="$("$herdr" worktree list --workspace "$active_ws" 2>/dev/null |
+      jq -r '.result.source.repo_root // empty' || true)"
+    [ -z "$repo_root" ] || return 0
+  fi
   while [ -n "$d" ] && [ "$d" != '/' ]; do
     if [ -d "$d/.git" ]; then
       repo_root="$d"
@@ -215,7 +238,15 @@ create() {
     git -C "$repo_root" fetch "${base%%/*}" "${base#*/}" >/dev/null 2>&1 || true
     args+=(--base "$base")
   fi
-  res="$("$herdr" "${args[@]}")" || fail "could not create worktree${branch:+ $branch}"
+  if ! res="$("$herdr" "${args[@]}")"; then
+    # 一个 commit 都没有的仓库：herdr 把 HEAD 当起点传给 git worktree add，git 只回
+    # "fatal: invalid reference: HEAD"，读着像这个脚本参数传错了。裸 git 这时会自己
+    # 推断 --orphan 建个空 worktree，但那个 worktree 里一个文件都没有 —— 真正要做的
+    # 是先提交一次，所以这里只把原因说清楚，不替人建空分支。
+    git -C "$repo_root" rev-parse --verify --quiet HEAD >/dev/null ||
+      fail "${repo_root##*/} has no commits yet; make the first commit, then create the worktree"
+    fail "could not create worktree${branch:+ $branch}"
+  fi
   apply_layout \
     "$(jq -er '.result.workspace.workspace_id' <<<"$res")" \
     "$(jq -er '.result.workspace.active_tab_id' <<<"$res")" \

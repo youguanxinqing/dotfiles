@@ -29,7 +29,10 @@ printf '%s\n' \
   'echo "herdr $*" >> "$STUB_LOG"' \
   'case "$1 $2" in' \
   '  "worktree list")' \
-  '    printf "{\"result\":{\"worktrees\":[" ' \
+  '    if [ "$3" = "--workspace" ] && [ "$4" = "W0" ]; then' \
+  '      echo "{\"error\":{\"message\":\"require a workspace inside a Git work tree\"}}" >&2; exit 1' \
+  '    fi' \
+  '    printf "{\"result\":{\"source\":{\"repo_root\":\"%s\"},\"worktrees\":[" "$STUB_ROOT/main"' \
   '    printf "{\"branch\":\"main\",\"path\":\"%s\",\"is_linked_worktree\":false}," "$STUB_ROOT/main"' \
   '    printf "{\"branch\":\"x\",\"path\":\"%s/parent/x\",\"is_linked_worktree\":true}," "$STUB_ROOT"' \
   '    printf "{\"branch\":\"y\",\"path\":\"%s/parent/y\",\"is_linked_worktree\":true}," "$STUB_ROOT"' \
@@ -37,6 +40,11 @@ printf '%s\n' \
   '    printf "]}}"' \
   '    ;;' \
   '  "worktree create")' \
+  '    cwd=""; base=""' \
+  '    while [ "$#" -gt 0 ]; do case "$1" in --cwd) cwd="$2" ;; --base) base="$2" ;; esac; shift; done' \
+  '    if [ -z "$base" ] && ! git -C "$cwd" rev-parse --verify --quiet HEAD >/dev/null; then' \
+  '      echo "{\"error\":{\"message\":\"fatal: invalid reference: HEAD\"}}" >&2; exit 1' \
+  '    fi' \
   '    printf "{\"result\":{\"workspace\":{\"workspace_id\":\"W1\",\"active_tab_id\":\"W1:t1\"},\"worktree\":{\"path\":\"%s\"}}}" "$STUB_ROOT/newwt"' \
   '    ;;' \
   '  "worktree open")' \
@@ -131,6 +139,39 @@ if [[ "$(<"$LOG")" == *'worktree create'* ]]; then
   echo "herdr-worktree created a worktree while asked to open one." >&2
   exit 1
 fi
+
+# pane 的 cwd 会跑出 workspace 的仓库（agent pane cd 到别处、打开笔记库、/tmp），仓库
+# 必须跟着 workspace 走 —— 跟着 cwd 走列的是另一个仓库的 worktree，建也建到那边去。
+OTHER="$TEST_ROOT/other-repo"
+git -c init.defaultBranch=master init -q "$OTHER"
+git -C "$OTHER" -c user.email=t@t -c user.name=t commit -q --allow-empty -m first
+: >"$LOG"
+HERDR_ACTIVE_WORKSPACE_ID=W7 RUN_CWD="$OTHER" run create from-elsewhere >/dev/null
+calls="$(<"$LOG")"
+assert_contains "$calls" 'worktree list --workspace W7'
+assert_contains "$calls" "--cwd $MAIN"
+if [[ "$calls" == *"--cwd $OTHER"* ]]; then
+  echo "herdr-worktree followed the pane cwd out of the workspace's repo." >&2
+  exit 1
+fi
+
+# workspace 不在 git work tree 里（纯笔记那种 workspace）herdr 报错，这时 cwd 是唯一的
+# 线索，得退回去按它找仓库，而不是整个键失效。
+: >"$LOG"
+HERDR_ACTIVE_WORKSPACE_ID=W0 RUN_CWD="$OTHER" run create fallback >/dev/null
+assert_contains "$(<"$LOG")" "--cwd $OTHER"
+
+# 一个 commit 都没有的仓库（init 过但没提交过的笔记库就是这样）：herdr 拿 HEAD 当起点，
+# git 回一句 "invalid reference: HEAD" —— 那句话读着像这个脚本参数传错了。报错必须说出
+# 真正的原因，否则弹窗里看不出该去做什么。
+EMPTY="$TEST_ROOT/empty"
+git -c init.defaultBranch=main init -q "$EMPTY"
+: >"$LOG"
+if out="$(RUN_CWD="$EMPTY" run create anything 2>&1)"; then
+  echo "herdr-worktree reported success creating a worktree in a repo with no commits." >&2
+  exit 1
+fi
+assert_contains "$out" 'no commits yet'
 
 # 用法错误走 2，和仓库里其他脚本一致。
 for bad in create bogus; do
