@@ -1,6 +1,7 @@
 [
 	{ "caption": "Format It", "command": "format_it" },
 	{ "caption": "Markdown Comment It", "command": "markdown_comments" },
+	{ "caption": "Paste Image", "command": "paste_image" },
 	// 没选区就整个 buffer，有选区只动选区 —— 这几条都是 newlines.py。
 	// 都带上 newline，面板里搜一个词就全出来。
 	{ "caption": "Strip Newlines", "command": "strip_newlines" },

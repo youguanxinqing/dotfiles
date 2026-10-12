@@ -51,4 +51,8 @@
 	// 要手动翻的语法菜单，直接打 json / rust 就切。text 不预填也能用，
 	// 但光搜 "json" 会混进 Preferences / Snippet 那些条目。
 	{ "keys": ["ctrl+s"], "command": "show_overlay", "args": { "overlay": "command_palette", "text": "Set Syntax: " } },
+	// ⌘⌥V = 把剪贴板里的图片落盘到同级 assets/ 并插入 markdown 链接，见 paste_image.py。
+	// 不用 ⌘⇧V：那是内置的 paste_and_indent，粘代码时一直在用。
+	// ⌘⌥V 在 ST 自带的 macOS keymap 里没有绑定（同前缀被占的是 a c e f l o p q r s w）。
+	{ "keys": ["super+alt+v"], "command": "paste_image" },
 ]
