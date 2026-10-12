@@ -1,9 +1,12 @@
 [
 	{ "caption": "Format It", "command": "format_it" },
 	{ "caption": "Markdown Comment It", "command": "markdown_comments" },
-	// 没选区就整个 buffer，有选区只动选区 —— 两条都是 newlines.py。
+	// 没选区就整个 buffer，有选区只动选区 —— 这几条都是 newlines.py。
+	// 都带上 newline，面板里搜一个词就全出来。
 	{ "caption": "Strip Newlines", "command": "strip_newlines" },
-	{ "caption": "Expand \\n", "command": "expand_newlines" },
+	{ "caption": "Split by Newline Character", "command": "split_by_newline" },
+	// 老名字留着顺手；背后就是 split_by_newline，原来那版碰到 \\n 会剩个反斜杠。
+	{ "caption": "Expand \\n (newline)", "command": "split_by_newline" },
 	// copy_path 是 Sublime 自带的，只挂在右键菜单上；这里只是把它放进命令面板。
 	{ "caption": "Absolute Path", "command": "copy_path" },
 ]
