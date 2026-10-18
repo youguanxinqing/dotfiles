@@ -27,3 +27,8 @@ layout derives root and session name from `$PWD`. Any invocation that names a
 project is forwarded untouched.
 
 Machine-local overrides belong in `~/.config/fish/local.d/local.fish`.
+
+On NixOS, `nixos-update` updates all flake inputs, activates the new generation
+temporarily with `nixos-rebuild test`, and runs
+`nixos-rebuild switch` only when the test command succeeds. It uses
+`/etc/nixos#nixos` by default.

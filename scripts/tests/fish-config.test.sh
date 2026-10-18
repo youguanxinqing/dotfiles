@@ -33,6 +33,47 @@ for fish_file in "$ROOT"/configs/fish/config.fish \
   "$FISH_BIN" --no-config -n "$fish_file"
 done
 
+# The NixOS updater must switch only after both the lock-file update and test
+# activation succeed. Use fake commands so the test never touches the host.
+NIXOS_UPDATE_FUNCTION="$ROOT/configs/fish/functions/nixos-update.fish"
+NIXOS_UPDATE_FLAKE="$TEST_ROOT/nixos"
+NIXOS_UPDATE_LOG="$TEST_ROOT/nixos-update.log"
+mkdir -p "$NIXOS_UPDATE_FLAKE"
+touch "$NIXOS_UPDATE_FLAKE/flake.nix"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'printf '\''nix %s\n'\'' "$*" >> "$NIXOS_UPDATE_LOG"' \
+  > "$TEST_BIN/nix"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'printf '\''sudo %s\n'\'' "$*" >> "$NIXOS_UPDATE_LOG"' \
+  'if [[ "${NIXOS_UPDATE_FAIL_TEST:-}" == 1 && "${1:-}" == nixos-rebuild && "${2:-}" == test ]]; then exit 42; fi' \
+  > "$TEST_BIN/sudo"
+chmod +x "$TEST_BIN/nix" "$TEST_BIN/sudo"
+
+PATH="$TEST_BIN:$TEST_SYSTEM_PATH" NIXOS_UPDATE_FUNCTION="$NIXOS_UPDATE_FUNCTION" \
+  NIXOS_UPDATE_LOG="$NIXOS_UPDATE_LOG" \
+  NIXOS_FLAKE_DIR="$NIXOS_UPDATE_FLAKE" NIXOS_CONFIGURATION=test-host \
+  "$FISH_BIN" --no-config -c 'source "$NIXOS_UPDATE_FUNCTION"; nixos-update'
+grep -Fqx "nix flake update --flake $NIXOS_UPDATE_FLAKE" "$NIXOS_UPDATE_LOG"
+grep -Fqx "sudo nixos-rebuild test --flake $NIXOS_UPDATE_FLAKE#test-host" "$NIXOS_UPDATE_LOG"
+grep -Fqx "sudo nixos-rebuild switch --flake $NIXOS_UPDATE_FLAKE#test-host" "$NIXOS_UPDATE_LOG"
+
+: > "$NIXOS_UPDATE_LOG"
+if PATH="$TEST_BIN:$TEST_SYSTEM_PATH" NIXOS_UPDATE_FUNCTION="$NIXOS_UPDATE_FUNCTION" \
+  NIXOS_UPDATE_LOG="$NIXOS_UPDATE_LOG" \
+  NIXOS_UPDATE_FAIL_TEST=1 NIXOS_FLAKE_DIR="$NIXOS_UPDATE_FLAKE" \
+  NIXOS_CONFIGURATION=test-host "$FISH_BIN" --no-config -c \
+  'source "$NIXOS_UPDATE_FUNCTION"; nixos-update' >/dev/null 2>&1; then
+  echo 'nixos-update unexpectedly succeeded after a failed test activation' >&2
+  exit 1
+fi
+grep -Fqx "sudo nixos-rebuild test --flake $NIXOS_UPDATE_FLAKE#test-host" "$NIXOS_UPDATE_LOG"
+if grep -Fq 'nixos-rebuild switch' "$NIXOS_UPDATE_LOG"; then
+  echo 'nixos-update switched after a failed test activation' >&2
+  exit 1
+fi
+
 # Verify the integration is sourced and installs both requested bindings. The
 # fake fzf emits the same bind surface without needing a terminal UI in tests.
 printf '%s\n' \
