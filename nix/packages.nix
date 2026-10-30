@@ -9,6 +9,13 @@ let
     };
 in
 {
+  # This release has no runtime dependencies; Pi provides its peer modules.
+  pi-open-tui = pkgs.fetchzip {
+    name = "pi-open-tui-0.3.13";
+    url = "https://registry.npmjs.org/pi-open-tui/-/pi-open-tui-0.3.13.tgz";
+    hash = "sha256-zGhEZN5PnX7pQ5iAfgKWqxHiTURPE76AE+KKDBw96sw=";
+  };
+
   ai-commit-message = buildRustPackage
     "ai-commit-message"
     "0.1.0"

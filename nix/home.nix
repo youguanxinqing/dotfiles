@@ -4,6 +4,14 @@
 
 let
   dotfilesPackages = self.packages.${pkgs.stdenv.hostPlatform.system};
+  piPackages = {
+    inherit (dotfilesPackages) pi-open-tui;
+  };
+  piPackageRoot = "${config.home.homeDirectory}/.pi/agent/nix-packages";
+  piPackageManifest = pkgs.writeText "pi-packages.json" (builtins.toJSON {
+    root = piPackageRoot;
+    names = builtins.attrNames piPackages;
+  });
   sqliteLibrary =
     "${pkgs.sqlite.out}/lib/libsqlite3${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}";
   neovimWithSqlite = pkgs.symlinkJoin {
@@ -126,6 +134,24 @@ in
 
   home.sessionPath = lib.mkAfter [ "$HOME/.local/bin" ];
 
+  home.file = lib.mapAttrs' (name: source:
+    lib.nameValuePair ".pi/agent/nix-packages/${name}" { inherit source; }
+  ) piPackages // {
+    # Link tracked helpers while preserving unrelated local executables.
+    ".local/bin" = {
+      source = self.outPath + "/bin";
+      recursive = true;
+    };
+  };
+
+  # Pi writes model choices and resource filters here. Merge only our packages
+  # rather than replacing settings.json with a read-only store symlink.
+  home.activation.piPackages = lib.hm.dag.entryAfter [ "writeBoundary" "linkGeneration" ] ''
+    run ${pkgs.python3}/bin/python3 ${./pi-settings.py} \
+      ${lib.escapeShellArg "${config.home.homeDirectory}/.pi/agent/settings.json"} \
+      ${piPackageManifest}
+  '';
+
   systemd.user.services.note-sync = {
     Unit.Description = "Synchronize notes with their Git upstream";
     Service = {
@@ -144,10 +170,4 @@ in
     Install.WantedBy = [ "timers.target" ];
   };
 
-  # Recursive Home Manager deployment links every tracked helper while allowing
-  # unrelated runtime/user files to coexist below ~/.local/bin.
-  home.file.".local/bin" = {
-    source = self.outPath + "/bin";
-    recursive = true;
-  };
 }
