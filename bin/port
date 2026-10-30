@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Find or kill whatever is listening on a TCP port.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: port search PORT
+       port kill [-9] PORT
+
+search  Show pid, name, user, cwd, command line, and listen address of every
+        process listening on TCP PORT.
+kill    Show the same, send SIGTERM (SIGKILL with -9), and wait for them to exit.
+EOF
+}
+
+# ponytail: TCP listeners only. A client connected to some remote PORT is not
+# "on" that port, and killing it is never what `port kill` means. Add UDP when a
+# UDP server needs it.
+listeners() {
+  lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null || true
+}
+
+describe() {
+  local pid=$1 port=$2 cwd addrs
+  cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p') || true
+  addrs=$(lsof -a -p "$pid" -nP -iTCP:"$port" -sTCP:LISTEN -Fn 2>/dev/null |
+    sed -n 's/^n//p' | sort -u | tr '\n' ' ') || true
+  printf 'pid   %s\n' "$pid"
+  printf 'name  %s\n' "$(basename "$(ps -o comm= -p "$pid")")"
+  printf 'user  %s\n' "$(ps -o user= -p "$pid")"
+  printf 'cwd   %s\n' "${cwd:-?}"
+  printf 'cmd   %s\n' "$(ps -o args= -p "$pid")"
+  printf 'addr  %s\n' "${addrs% }"
+}
+
+# lsof cannot see another user's sockets without root, so "nothing" may be a lie.
+nothing() {
+  echo "port: nothing listening on TCP $1" >&2
+  [[ $(id -u) -eq 0 ]] || echo "port: other users' processes are hidden; retry with sudo" >&2
+  exit 1
+}
+
+alive() {
+  local pid
+  for pid in "$@"; do
+    kill -0 "$pid" 2>/dev/null && return 0
+  done
+  return 1
+}
+
+check_port() {
+  [[ $1 =~ ^[1-9][0-9]{0,4}$ ]] && (($1 <= 65535)) || {
+    echo "port: not a port number: $1" >&2
+    exit 2
+  }
+}
+
+search() {
+  local port=$1 pids pid first=1
+  pids=$(listeners "$port")
+  [[ -n $pids ]] || nothing "$port"
+  for pid in $pids; do
+    ((first)) || echo
+    first=0
+    describe "$pid" "$port"
+  done
+}
+
+kill_port() {
+  local sig=$1 port=$2 pids rest i
+  pids=$(listeners "$port")
+  [[ -n $pids ]] || nothing "$port"
+  # Show what dies before it dies.
+  search "$port"
+  echo
+  # shellcheck disable=SC2086 # one pid per word
+  kill -s "$sig" $pids
+  for ((i = 0; i < 50; i++)); do
+    # shellcheck disable=SC2086
+    alive $pids || break
+    sleep 0.1
+  done
+  # shellcheck disable=SC2086
+  if alive $pids; then
+    echo "port: still running after 5s: $(echo $pids); try: port kill -9 $port" >&2
+    exit 1
+  fi
+  rest=$(listeners "$port")
+  if [[ -n $rest ]]; then
+    echo "port: killed, but TCP $port is listened on again by pid $(echo $rest) (supervisor restart?)" >&2
+    exit 1
+  fi
+  echo "port: TCP $port is free"
+}
+
+case "${1:-}" in
+  search)
+    [[ $# -eq 2 ]] || { usage >&2; exit 2; }
+    check_port "$2"
+    search "$2"
+    ;;
+  kill)
+    shift
+    sig=TERM
+    if [[ ${1:-} == -9 ]]; then
+      sig=KILL
+      shift
+    fi
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    check_port "$1"
+    kill_port "$sig" "$1"
+    ;;
+  -h | --help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
