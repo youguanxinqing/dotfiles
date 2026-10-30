@@ -23,6 +23,13 @@ pane.scroll 收的是绝对 offset_from_bottom，所以这里是 read-modify-wri
 
 （别拿「同时轰 N 个进程」去量这个 —— 那样连 python 都能测出丢步，但键盘连发是按
 间隔排队的，从不同时发。30ms 间隔以上，无锁的 python 也是对的。）
+
+Claude Code 用 fullscreen 渲染（tui = "fullscreen"）时对话在 alternate screen 里，
+herdr 的 scrollback 是空的，pane.scroll 滚不到。这时把按键原样转给 Claude，由
+~/.claude/keybindings.json 的 Scroll 上下文接成 scroll:halfPageUp/Down。不发 PgUp：
+pane.send_keys 不认翻页键，send_text 遇到 bracketed paste 会被包成粘贴。
+send_keys 按 pane 当前的键盘模式编码，Claude 开着 kitty 协议时是 CSI 117;7u，不会被
+拆成 Esc + Ctrl+U 打断正在跑的回合。
 ]]
 
 local ffi = require("ffi")
@@ -46,7 +53,8 @@ local function die(msg)
   os.exit(1)
 end
 
-local function call(path, method, params)
+-- done：回包里出现这个子串就算读完。
+local function call(path, method, params, done)
   local fd = ffi.C.socket(AF_UNIX, SOCK_STREAM, 0)
   if fd < 0 then die("socket() failed") end
 
@@ -69,7 +77,7 @@ local function call(path, method, params)
     if n <= 0 then break end
     out[#out + 1] = ffi.string(buf, n)
     local so_far = table.concat(out)
-    if so_far:find('"scroll"', 1, true) or so_far:find('"error"', 1, true) then break end
+    if so_far:find(done, 1, true) or so_far:find('"error"', 1, true) then break end
   until false
   ffi.C.close(fd)
 
@@ -88,7 +96,16 @@ local function target_offset(direction, offset, max_offset, viewport)
   return math.max(0, math.min(want, max_offset))
 end
 
+-- ponytail: 只按 pane 上登记的 agent 判断，pane.get 不暴露 alternate screen。
+-- 还在用 tui = "default" 的 Claude 会话也会收到转发，这个键在里面就不起作用了；
+-- herdr 哪天在 API 里给出 alternate_screen_active，改成按它判断。
+local function owned_by_claude(info)
+  return info:find('"agent":"claude"', 1, true) ~= nil
+end
+
 local function self_check()
+  assert(owned_by_claude('{"pane":{"agent":"claude","scroll":{}}}'))
+  assert(not owned_by_claude('{"pane":{"agent":null,"scroll":{}}}'))
   assert(target_offset("up", 0, 176, 52) == 26)
   assert(target_offset("down", 0, 176, 52) == 0, "already at the bottom, stay put")
   assert(target_offset("up", 170, 176, 52) == 176, "clamp to the oldest line")
@@ -130,14 +147,20 @@ local function main()
   if ffi.C.flock(lock, LOCK_EX) < 0 then die("cannot lock " .. lock_path) end
 
   local target = string.format('{"pane_id":"%s"}', pane)
-  local info = call(sock, "pane.get", target)
+  local info = call(sock, "pane.get", target, '"scroll"')
+  if owned_by_claude(info) then
+    call(sock, "pane.send_keys", string.format('{"pane_id":"%s","keys":["ctrl+alt+%s"]}',
+      pane, arg1 == "up" and "u" or "d"), '"result"')
+    ffi.C.close(lock)
+    return
+  end
   local offset = tonumber(info:match('"offset_from_bottom":(%d+)'))
   local max_offset = tonumber(info:match('"max_offset_from_bottom":(%d+)'))
   local viewport = tonumber(info:match('"viewport_rows":(%d+)'))
   if not (offset and max_offset and viewport) then die("no scroll metrics for pane " .. pane) end
 
   call(sock, "pane.scroll", string.format('{"pane_id":"%s","offset_from_bottom":%d}',
-    pane, target_offset(arg1, offset, max_offset, viewport)))
+    pane, target_offset(arg1, offset, max_offset, viewport)), '"scroll"')
 
   ffi.C.close(lock)
 end

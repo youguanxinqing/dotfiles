@@ -59,3 +59,8 @@ if grep -Fq 'install ZingerLittleBee/Heeler/plugin' "$TEST_LOG"; then
   echo "Herdr reinstalled a disabled plugin instead of enabling it." >&2
   exit 1
 fi
+
+# herdr-half-page 自带的断言（滚动目标的夹逼、Claude pane 识别）。没有 luajit 的机器跳过。
+if command -v luajit >/dev/null 2>&1; then
+  luajit "$ROOT/bin/herdr-half-page" --self-check >/dev/null || die "herdr-half-page self-check failed."
+fi
