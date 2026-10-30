@@ -1,6 +1,6 @@
 { self }:
 
-{ pkgs, lib, ... }:
+{ config, pkgs, lib, ... }:
 
 let
   dotfilesPackages = self.packages.${pkgs.stdenv.hostPlatform.system};
@@ -125,6 +125,24 @@ in
   };
 
   home.sessionPath = lib.mkAfter [ "$HOME/.local/bin" ];
+
+  systemd.user.services.note-sync = {
+    Unit.Description = "Synchronize notes with their Git upstream";
+    Service = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash ${self.outPath}/cron/note-sync.sh ${config.home.homeDirectory}/Documents/noarmal-note-seq";
+      Environment = "PATH=${lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.coreutils pkgs.util-linux ]}";
+      TimeoutStartSec = "10min";
+    };
+  };
+  systemd.user.timers.note-sync = {
+    Unit.Description = "Synchronize notes every 30 minutes";
+    Timer = {
+      OnCalendar = "*:0/30";
+      Persistent = true;
+    };
+    Install.WantedBy = [ "timers.target" ];
+  };
 
   # Recursive Home Manager deployment links every tracked helper while allowing
   # unrelated runtime/user files to coexist below ~/.local/bin.
