@@ -12,6 +12,10 @@ rex.bind("ctrl+b>x", "pane.close")
 -- "Filter or create..." field creates a session from a name that matches none.
 rex.bind("ctrl+b>shift+n", "session.switch")
 
+-- herdr's prefix+T. An unnamed tab shows its focused pane's title; a renamed one
+-- keeps its name. Renaming to empty goes back to following the pane.
+rex.bind("ctrl+b>shift+t", "client.tab.rename")
+
 -- Move between panes in this tab, vim-style (herdr's prefix+hjkl). Stops at the edge.
 rex.bind("ctrl+b>h", "pane.focus.left")
 rex.bind("ctrl+b>j", "pane.focus.down")
