@@ -9,54 +9,65 @@ rex.bind("ctrl+b>shift+5", "pane.split.right")
 rex.bind("ctrl+b>shift+'", "pane.split.down")
 rex.bind("ctrl+b>x", "pane.close")
 
--- ctrl+b f: fuzzy-jump to a tab in this session (herdr's prefix+f). Rex has no
--- tab picker, so fzf runs in a floating pane and focuses the pick itself.
--- run must return at once: the app holds back every later key and click until
--- a key's action returns, so an action that waits for the picker deadlocks --
--- the picker never gets a keystroke (Rex 0.1.0 build 1696, froze the app 2 min).
--- ponytail: this session only. Another session needs the client action
--- session.select, which only a waiting action (the deadlock above) or the CLI
--- with Remote Control on can send.
+-- ctrl+b f: fuzzy-jump to any tab in any session (herdr's prefix+f). Rex has no
+-- tab picker, so fzf runs in a floating pane. Two Rex 0.1.0 (1696) facts shape it:
+-- * run must return at once. The app holds back every later key until a key's
+--   action returns, so waiting for the pick inside run deadlocks the picker.
+-- * The app ignores server-side focus (`rex window focus` moves the server's
+--   active window, not the view), so the picker must switch through the client
+--   action session.select -- from the CLI, which needs Remote Control on.
 local terminal = "com.superlogical.terminal"
 
 -- Window labels are generic ("Window 8762a745"); the focused pane's title and
 -- cwd are what the tab actually shows.
-local function tab_rows(view)
+local function tab_rows(current)
   local home = os.getenv("HOME")
   local rows = {}
-  for i, w in ipairs(view.windows) do
-    local q = { block_id = w.focused_block_id }
-    local title = (rex.block.call(terminal, "title", q) or {}).title or ""
-    local pwd = ((rex.block.call(terminal, "pwd", q) or {}).pwd or ""):gsub("^file://[^/]*", "")
-    if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
-    local mark = w.window_id == view.active_window_id and "*" or " "
-    rows[#rows + 1] = table.concat({ w.window_id, mark .. i, title, pwd }, "\t")
+  for _, s in ipairs(assert(rex.call("session.list")).sessions) do
+    local view = assert(rex.session.view{ session_id = s.session_id })
+    for i, w in ipairs(view.windows) do
+      local q = { session_id = s.session_id, block_id = w.focused_block_id }
+      local title = (rex.block.call(terminal, "title", q) or {}).title or ""
+      local pwd = ((rex.block.call(terminal, "pwd", q) or {}).pwd or ""):gsub("^file://[^/]*", "")
+      if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
+      rows[#rows + 1] = table.concat({
+        s.session_id, w.window_id, (w.window_id == current and "*" or " ") .. i, s.label or "", title, pwd,
+      }, "\t")
+    end
   end
   return rows
 end
 
--- Field 1 is the window ID: hidden from fzf, then cut back out of its pick.
+-- Fields 1-2 are the IDs: hidden from fzf, then cut back out of its pick.
+-- A failed select (Remote Control off) keeps its error on screen until Enter.
 local picker = [[
 export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-w=$(fzf --delimiter='\t' --with-nth=2.. --layout=reverse --prompt='tab> ' <"$1" | cut -f1)
+pick=$(fzf --delimiter='\t' --with-nth=3.. --layout=reverse --prompt='tab> ' <"$1")
 rm -f "$1"
-if [ -n "$w" ]; then rex window focus -s "$2" "$w"; fi
+[ -n "$pick" ] || exit 0
+s=$(printf '%s\n' "$pick" | cut -f1)
+w=$(printf '%s\n' "$pick" | cut -f2)
+rex -C "$2" do session.select session_id="$s" window_id="$w" || read -r _
 ]]
 
 rex.action{
   name  = "tab_jump",
   title = "Jump to Tab…",
   run   = function(ctx)
+    -- The window the key came from: the one on screen, which the server's
+    -- active window may not be.
+    local here = assert(rex.session.describe_block{ block_id = ctx.block_id }).block
     local rows_path = os.tmpname()
     local f = assert(io.open(rows_path, "w"))
-    f:write(table.concat(tab_rows(assert(rex.session.view{})), "\n"), "\n")
+    f:write(table.concat(tab_rows(here.window_id), "\n"), "\n")
     f:close()
     assert(rex.session.new_layer{
-      bounds = { 0.2, 0.15, 0.6, 0.5 },
-      focus  = true,
-      layout = rex.layout.block{
+      window_id = here.window_id,
+      bounds    = { 0.2, 0.15, 0.6, 0.5 },
+      focus     = true,
+      layout    = rex.layout.block{
         flavor  = "com.superlogical.terminal.shell",
-        options = { shell = "none", command = { "/bin/sh", "-c", picker, "sh", rows_path, ctx.session_id } },
+        options = { shell = "none", command = { "/bin/sh", "-c", picker, "sh", rows_path, ctx.client_id } },
       },
     })
   end,
