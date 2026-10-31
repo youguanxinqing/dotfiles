@@ -8,6 +8,7 @@ rex.bind("ctrl+b>ctrl+b", "pane.send_key", { key = "ctrl+b" })
 rex.bind("ctrl+b>shift+5", "pane.split.right")
 rex.bind("ctrl+b>shift+'", "pane.split.down")
 rex.bind("ctrl+b>x", "pane.close")
+rex.bind("ctrl+b>shift+n", "session.new") -- herdr's prefix+N new workspace
 
 -- Move between panes in this tab, vim-style (herdr's prefix+hjkl). Stops at the edge.
 rex.bind("ctrl+b>h", "pane.focus.left")
