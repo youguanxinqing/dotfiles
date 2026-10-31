@@ -43,6 +43,12 @@ local function window_of(ctx)
   return assert(rex.session.describe_block{ block_id = ctx.block_id }).block.window_id
 end
 
+-- Whether a tab was given a name, rather than keeping the default label made
+-- from its ID ("Window 8762a745").
+local function is_named(w)
+  return w.label ~= "Window " .. w.window_id:sub(-8)
+end
+
 -- A renamed tab shows its name. An unnamed one keeps the default label made from
 -- its ID ("Window 8762a745") and shows its focused pane's title instead.
 local function tab_rows(current)
@@ -56,7 +62,7 @@ local function tab_rows(current)
     local view = rex.session.view{ session_id = s.session_id } or { windows = {} }
     for i, w in ipairs(view.windows) do
       local q = { session_id = s.session_id, block_id = w.focused_block_id }
-      local named = w.label ~= "Window " .. w.window_id:sub(-8)
+      local named = is_named(w)
       local title = named and w.label or (rex.block.call(terminal, "title", q) or {}).title or ""
       local pwd = pwd_of(q)
       if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
@@ -163,6 +169,115 @@ rex.action{
 rex.action{ name = "scratch_hide", title = "Hide Scratch Shell", run = hide_scratch }
 rex.bind("ctrl+b>p", "scratch_toggle")
 rex.bind("ctrl+b>q", "scratch_hide")
+
+-- New tabs, after herdr-smart-tab. Each opens in the current pane's directory
+-- and is shown once it is in place.
+--   ctrl+b c  at the end, unnamed (tmux c).
+--   ctrl+b a  right after this tab, in its group (tmux a). Tabs sharing a base
+--             name are numbered in tab order: zsh, zshⅱ, zshⅲ. An unnamed tab
+--             has no group, so the new one stays unnamed too.
+--   cmd+t     at the end, named first in a floating prompt. Esc cancels; an
+--             empty name makes an unnamed tab.
+local SUFFIX = { "", "ⅱ", "ⅲ", "ⅳ", "ⅴ", "ⅵ", "ⅶ", "ⅷ", "ⅸ", "ⅹ", "ⅺ", "ⅻ" }
+
+local function group_base(label)
+  -- Small roman numerals are U+2170-217F, three bytes each in UTF-8.
+  while label:find("\226\133[\176-\191]$") do label = label:sub(1, -4) end
+  return (label:gsub("%(%d+%)$", ""))
+end
+
+local function renumber_group(base)
+  local n = 0
+  for _, w in ipairs(assert(rex.session.view{}).windows) do
+    if is_named(w) and group_base(w.label) == base then
+      n = n + 1
+      local want = base .. (SUFFIX[n] or ("(" .. n .. ")"))
+      if w.label ~= want then
+        assert(rex.session.set_window_label{ window_id = w.window_id, label = want })
+      end
+    end
+  end
+end
+
+-- Opens a tab at the end and returns its ID. The caller shows it last.
+local function open_tab(ctx, label, cwd)
+  cwd = cwd or pwd_of({ block_id = ctx.block_id })
+  return assert(rex.session.new_window{
+    window_label = label,
+    layout = rex.layout.block{
+      flavor  = "com.superlogical.terminal.shell",
+      options = { cwd = cwd ~= "" and cwd or nil },
+    },
+  }).window_id
+end
+
+-- The app ignores the server's active window; only a client action moves it.
+local function show_tab(ctx, window_id)
+  rex.client.queue("session.select", { session_id = ctx.session_id, window_id = window_id })
+end
+
+rex.action{
+  name  = "tab_new",
+  title = "New Tab at End",
+  args  = { name = "string?", cwd = "string?" },
+  run   = function(ctx, args)
+    args = args or {}
+    show_tab(ctx, open_tab(ctx, args.name ~= "" and args.name or nil, args.cwd))
+  end,
+}
+
+rex.action{
+  name  = "tab_new_after",
+  title = "New Tab After This One",
+  run   = function(ctx)
+    local here, windows = window_of(ctx), assert(rex.session.view{}).windows
+    local next_id, base = nil, ""
+    for i, w in ipairs(windows) do
+      if w.window_id == here then
+        next_id = windows[i + 1] and windows[i + 1].window_id
+        base = is_named(w) and group_base(w.label) or ""
+      end
+    end
+    local id = open_tab(ctx, base ~= "" and base or nil)
+    if next_id then
+      assert(rex.session.move_window{ window_id = id, before_window_id = next_id })
+    end
+    if base ~= "" then renumber_group(base) end
+    show_tab(ctx, id)
+  end,
+}
+
+-- $1: the client to ask, $2: the cwd for the tab. fzf exits 130 on Esc.
+-- Creating goes back through the app (Remote Control) so it runs tab_new.
+local ask_tab_name = [[
+export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
+name=$(fzf --print-query --layout=reverse --prompt='new tab> ' \
+  --header='enter: create (empty = unnamed)   esc: cancel' </dev/null)
+[ $? -eq 130 ] && exit 0
+rex -C "$1" do tab_new name="$name" cwd="$2" || read -r _
+]]
+
+rex.action{
+  name  = "tab_new_named",
+  title = "New Named Tab…",
+  run   = function(ctx)
+    assert(rex.session.new_layer{
+      window_id = window_of(ctx),
+      bounds    = { 0.25, 0.3, 0.5, 0.25 },
+      focus     = true,
+      layout    = rex.layout.block{
+        flavor  = "com.superlogical.terminal.shell",
+        options = { shell = "none", command = {
+          "/bin/sh", "-c", ask_tab_name, "sh", ctx.client_id or "", pwd_of({ block_id = ctx.block_id }),
+        } },
+      },
+    })
+  end,
+}
+
+rex.bind("ctrl+b>c", "tab_new")
+rex.bind("ctrl+b>a", "tab_new_after")
+rex.bind("cmd+t", "tab_new_named")
 
 -- Half-page scroll in fullscreen Claude Code. Its Scroll context binds
 -- PageUp/PageDown to half a viewport by default, so this needs nothing in
