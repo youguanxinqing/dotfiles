@@ -8,7 +8,9 @@ rex.bind("ctrl+b>ctrl+b", "pane.send_key", { key = "ctrl+b" })
 rex.bind("ctrl+b>shift+5", "pane.split.right")
 rex.bind("ctrl+b>shift+'", "pane.split.down")
 rex.bind("ctrl+b>x", "pane.close")
-rex.bind("ctrl+b>shift+n", "session.new") -- herdr's prefix+N new workspace
+-- herdr's prefix+N, but asking for the name first: the session picker's
+-- "Filter or create..." field creates a session from a name that matches none.
+rex.bind("ctrl+b>shift+n", "session.switch")
 
 -- Move between panes in this tab, vim-style (herdr's prefix+hjkl). Stops at the edge.
 rex.bind("ctrl+b>h", "pane.focus.left")
