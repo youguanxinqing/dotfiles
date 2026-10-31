@@ -9,6 +9,12 @@ rex.bind("ctrl+b>shift+5", "pane.split.right")
 rex.bind("ctrl+b>shift+'", "pane.split.down")
 rex.bind("ctrl+b>x", "pane.close")
 
+-- Move between panes in this tab, vim-style (herdr's prefix+hjkl). Stops at the edge.
+rex.bind("ctrl+b>h", "pane.focus.left")
+rex.bind("ctrl+b>j", "pane.focus.down")
+rex.bind("ctrl+b>k", "pane.focus.up")
+rex.bind("ctrl+b>l", "pane.focus.right")
+
 -- ctrl+b f: fuzzy-jump to any tab in any session (herdr's prefix+f). Rex has no
 -- tab picker, so fzf runs in a floating pane. Two Rex 0.1.0 (1696) facts shape it:
 -- * run must return at once. The app holds back every later key until a key's
