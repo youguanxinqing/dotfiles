@@ -43,16 +43,21 @@ local function window_of(ctx)
   return assert(rex.session.describe_block{ block_id = ctx.block_id }).block.window_id
 end
 
--- Window labels are generic ("Window 8762a745"); the focused pane's title and
--- cwd are what the tab actually shows.
+-- A renamed tab shows its name. An unnamed one keeps the default label made from
+-- its ID ("Window 8762a745") and shows its focused pane's title instead.
 local function tab_rows(current)
   local home = os.getenv("HOME")
   local rows = {}
-  for _, s in ipairs(assert(rex.call("session.list")).sessions) do
-    local view = assert(rex.session.view{ session_id = s.session_id })
+  -- A session's windows are readable only on a stream attached to it. An action
+  -- gets a stream of its own, attached to its session alone -- not the app's
+  -- connection, which is attached everywhere -- so attach_all here changes
+  -- nothing the app relies on.
+  for _, s in ipairs(assert(rex.call("session.attach_all", { event_scope = "session" })).sessions) do
+    local view = rex.session.view{ session_id = s.session_id } or { windows = {} }
     for i, w in ipairs(view.windows) do
       local q = { session_id = s.session_id, block_id = w.focused_block_id }
-      local title = (rex.block.call(terminal, "title", q) or {}).title or ""
+      local named = w.label ~= "Window " .. w.window_id:sub(-8)
+      local title = named and w.label or (rex.block.call(terminal, "title", q) or {}).title or ""
       local pwd = pwd_of(q)
       if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
       rows[#rows + 1] = table.concat({
