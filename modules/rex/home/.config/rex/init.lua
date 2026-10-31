@@ -90,28 +90,67 @@ rex.action{
 }
 rex.bind("ctrl+b>f", "tab_jump")
 
--- ctrl+b p: a floating shell over this tab, in the current pane's directory.
--- exit or ctrl+d closes it.
--- ponytail: a fresh shell each time, gone when closed; herdr's prefix+p
--- scratchpad kept one alive between toggles. Detach and re-place the block if
--- that is missed.
-rex.action{
-  name  = "popup_shell",
-  title = "Popup Shell",
-  run   = function(ctx)
+-- ctrl+b p / ctrl+b q: a scratch shell per session (herdr's prefix+p / prefix+q).
+-- p floats it over this tab, starting it in the current pane's directory the
+-- first time; q hides it. Hiding detaches the block, so the shell and its
+-- scrollback keep running outside every window until p brings them back. It
+-- belongs to the session: another session gets its own, and closing the session
+-- closes it. exit or ctrl+b x ends it for good.
+local SCRATCH = "scratch" -- block label: how a session finds its scratch again
+local SCRATCH_BOUNDS = { 0.15, 0.1, 0.7, 0.7 }
+
+local function scratch_of(session_id)
+  for _, b in ipairs(assert(rex.session.list_blocks{ session_id = session_id }).blocks) do
+    if b.label == SCRATCH then return b end
+  end
+end
+
+local function hide_scratch(ctx)
+  local b = scratch_of(ctx.session_id)
+  if b and b.placement == "placed" then
+    assert(rex.session.detach_block{ block_id = b.block_id })
+  end
+end
+
+local function show_scratch(ctx)
+  local b = scratch_of(ctx.session_id)
+  if not b then
     local pwd = pwd_of({ block_id = ctx.block_id })
-    assert(rex.session.new_layer{
+    local made = assert(rex.session.new_layer{
       window_id = window_of(ctx),
-      bounds    = { 0.15, 0.1, 0.7, 0.7 },
+      bounds    = SCRATCH_BOUNDS,
       focus     = true,
       layout    = rex.layout.block{
         flavor  = "com.superlogical.terminal.shell",
         options = { cwd = pwd ~= "" and pwd or nil },
       },
     })
+    assert(rex.session.set_block_label{ block_id = made.block_ids[1], label = SCRATCH })
+    return
+  end
+  -- A layout only ever starts new blocks, so an existing one comes back in two
+  -- steps: move_block places it (detached or in another tab) as a split here,
+  -- then float_block lifts it into a floating layer.
+  assert(rex.session.move_block{ block_id = b.block_id, anchor_block_id = ctx.block_id })
+  assert(rex.session.float_block{ block_id = b.block_id, bounds = SCRATCH_BOUNDS })
+  assert(rex.session.focus_block{ block_id = b.block_id })
+end
+
+rex.action{
+  name  = "scratch_toggle",
+  title = "Toggle Scratch Shell",
+  run   = function(ctx)
+    local b = scratch_of(ctx.session_id)
+    if b and b.placement == "placed" and b.window_id == window_of(ctx) then
+      hide_scratch(ctx)
+    else
+      show_scratch(ctx)
+    end
   end,
 }
-rex.bind("ctrl+b>p", "popup_shell")
+rex.action{ name = "scratch_hide", title = "Hide Scratch Shell", run = hide_scratch }
+rex.bind("ctrl+b>p", "scratch_toggle")
+rex.bind("ctrl+b>q", "scratch_hide")
 
 -- Half-page scroll in fullscreen Claude Code. Its Scroll context binds
 -- PageUp/PageDown to half a viewport by default, so this needs nothing in
