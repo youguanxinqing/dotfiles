@@ -10,4 +10,7 @@
 	{ "caption": "Expand \\n (newline)", "command": "split_by_newline" },
 	// copy_path 是 Sublime 自带的，只挂在右键菜单上；这里只是把它放进命令面板。
 	{ "caption": "Absolute Path", "command": "copy_path" },
+	// 笔记库的建目录流水线，见 new_scratch_dir.py：先选 scratch/ 下的第一级
+	// （00_important、02_需求 …），再输名字，回车得到 YYY.MM.DD名字/。
+	{ "caption": "New Scratch Dir", "command": "new_scratch_dir" },
 ]
