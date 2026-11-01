@@ -74,12 +74,17 @@ local function tab_rows(current)
   return rows
 end
 
+-- When a focused pane closes or is detached, Rex focuses some other block in its
+-- window -- the newest, not the one focused before. So each floating prompt
+-- below hands focus back to the pane it came from ($3) before it exits.
+--
 -- Fields 1-2 are the IDs: hidden from fzf, then cut back out of its pick.
 -- A failed select (Remote Control off) keeps its error on screen until Enter.
 local picker = [[
 export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 pick=$(fzf --delimiter='\t' --with-nth=3.. --layout=reverse --prompt='tab> ' <"$1")
 rm -f "$1"
+rex focus "$3" 2>/dev/null
 [ -n "$pick" ] || exit 0
 s=$(printf '%s\n' "$pick" | cut -f1)
 w=$(printf '%s\n' "$pick" | cut -f2)
@@ -101,7 +106,9 @@ rex.action{
       focus     = true,
       layout    = rex.layout.block{
         flavor  = "com.superlogical.terminal.shell",
-        options = { shell = "none", command = { "/bin/sh", "-c", picker, "sh", rows_path, ctx.client_id } },
+        options = { shell = "none", command = {
+          "/bin/sh", "-c", picker, "sh", rows_path, ctx.client_id, ctx.block_id,
+        } },
       },
     })
   end,
@@ -123,14 +130,24 @@ local function scratch_of(session_id)
   end
 end
 
+-- session -> the pane focused when p brought the scratch up, for q to hand
+-- focus back to. Lost on config reload; q then leaves focus where Rex puts it.
+local scratch_return = {}
+
 local function hide_scratch(ctx)
   local b = scratch_of(ctx.session_id)
   if b and b.placement == "placed" then
     assert(rex.session.detach_block{ block_id = b.block_id })
+    local back = scratch_return[ctx.session_id]
+    local d = back and ctx.block_id == b.block_id and rex.session.describe_block{ block_id = back }
+    if d and d.block.window_id == b.window_id then
+      assert(rex.session.focus_block{ block_id = back })
+    end
   end
 end
 
 local function show_scratch(ctx)
+  scratch_return[ctx.session_id] = ctx.block_id
   local b = scratch_of(ctx.session_id)
   if not b then
     local pwd = pwd_of({ block_id = ctx.block_id })
@@ -247,13 +264,16 @@ rex.action{
   end,
 }
 
--- $1: the client to ask, $2: the cwd for the tab. fzf exits 130 on Esc.
+-- $1: the client to ask, $2: the cwd for the tab, $3: the pane to hand focus
+-- back to. fzf exits 130 on Esc.
 -- Creating goes back through the app (Remote Control) so it runs tab_new.
 local ask_tab_name = [[
 export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 name=$(fzf --print-query --layout=reverse --prompt='new tab> ' \
   --header='enter: create (empty = unnamed)   esc: cancel' </dev/null)
-[ $? -eq 130 ] && exit 0
+cancelled=$?
+rex focus "$3" 2>/dev/null
+[ $cancelled -eq 130 ] && exit 0
 rex -C "$1" do tab_new name="$name" cwd="$2" || read -r _
 ]]
 
@@ -268,7 +288,7 @@ rex.action{
       layout    = rex.layout.block{
         flavor  = "com.superlogical.terminal.shell",
         options = { shell = "none", command = {
-          "/bin/sh", "-c", ask_tab_name, "sh", ctx.client_id or "", pwd_of({ block_id = ctx.block_id }),
+          "/bin/sh", "-c", ask_tab_name, "sh", ctx.client_id or "", pwd_of({ block_id = ctx.block_id }), ctx.block_id,
         } },
       },
     })
