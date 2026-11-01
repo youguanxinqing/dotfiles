@@ -217,24 +217,23 @@ end
 
 -- $1 digit art, $2 its SGR colour. The reader also gets $3 the pane to fall
 -- back to, $4 the panes in number order, $5 the other number floats to close.
--- A new float can start at a default size and get its real one a moment
--- later, so the art is redrawn whenever the size changes.
+-- A new float starts at 80x24 and the app shrinks it to its bounds a moment
+-- later; art centred for 80x24 lands off screen until redrawn. So the first
+-- frame assumes the 9x14 the bounds aim at, and WINCH redraws for the real
+-- size. bash runs the trap while read waits (zsh does not), so even floats that
+-- never get a key wait in read -- with the default IFS, which the trap's word
+-- splitting runs under.
 local hop = [[
 export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-art=$1 sgr=$2 orig=$3 panes=$4 others=$5 size= i=0
+art=$1 sgr=$2 orig=$3 panes=$4 others=$5
 draw() {
-  [ "$size" = "$(stty size)" ] && return
-  size=$(stty size)
-  set -- $size
   printf '\033[?25l\033[2J\033[%d;1H\033[%sm' $((($1 - 5) / 2 + 1)) "$sgr"
   printf '%s\n' "$art" | while IFS= read -r l; do printf '%*s%s\n' $((($2 - 6) / 2)) '' "$l"; done
 }
-while [ $i -lt 20 ]; do
-  draw
-  if [ -z "$orig" ]; then sleep 1
-  elif IFS= read -rsn1 -t 1 k; then break; fi
-  i=$((i + 1))
-done
+trap 'draw $(stty size)' WINCH
+size=$(stty size)
+if [ "$size" = "24 80" ]; then draw 9 14; else draw $size; fi
+read -rsn1 -t 20 k
 [ -n "$orig" ] || exit 0
 set -- $panes
 target=$orig
