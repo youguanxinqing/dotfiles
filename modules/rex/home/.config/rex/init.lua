@@ -117,7 +117,7 @@ rex.bind("ctrl+b>f", "tab_jump")
 
 -- ctrl+b p / ctrl+b q: a scratch shell per session (herdr's prefix+p / prefix+q).
 -- p floats it over this tab, starting it in the current pane's directory the
--- first time; q hides it. Hiding detaches the block, so the shell and its
+-- first time; q inside it hides it. Hiding detaches the block, so the shell and its
 -- scrollback keep running outside every window until p brings them back. It
 -- belongs to the session: another session gets its own, and closing the session
 -- closes it. exit or ctrl+b x ends it for good.
@@ -139,7 +139,7 @@ local function hide_scratch(ctx)
   if b and b.placement == "placed" then
     assert(rex.session.detach_block{ block_id = b.block_id })
     local back = scratch_return[ctx.session_id]
-    local d = back and ctx.block_id == b.block_id and rex.session.describe_block{ block_id = back }
+    local d = back and rex.session.describe_block{ block_id = back }
     if d and d.block.window_id == b.window_id then
       assert(rex.session.focus_block{ block_id = back })
     end
@@ -183,9 +183,121 @@ rex.action{
     end
   end,
 }
-rex.action{ name = "scratch_hide", title = "Hide Scratch Shell", run = hide_scratch }
 rex.bind("ctrl+b>p", "scratch_toggle")
-rex.bind("ctrl+b>q", "scratch_hide")
+
+-- ctrl+b q outside the scratch: tmux's display-panes (herdr-hop in herdr). Each
+-- pane in this tab gets a big number; pressing it focuses that pane, any other
+-- key or 20 s (display-panes-time in tmux.conf) stays put. The numbers are
+-- small floating terminals: Rex draws nothing over a pane itself. The one over
+-- the current pane is red, like tmux, and is the one that reads the key.
+local DIGITS = {
+  { " # ", "## ", " # ", " # ", "###" }, { "###", "  #", "###", "#  ", "###" },
+  { "###", "  #", "###", "  #", "###" }, { "# #", "# #", "###", "  #", "  #" },
+  { "###", "#  ", "###", "  #", "###" }, { "###", "#  ", "###", "# #", "###" },
+  { "###", "  #", "  #", "  #", "  #" }, { "###", "# #", "###", "# #", "###" },
+  { "###", "# #", "###", "  #", "###" },
+}
+
+local function big(n)
+  local rows = {}
+  for i, row in ipairs(DIGITS[n]) do rows[i] = (row:gsub(" ", "  "):gsub("#", "██")) end
+  return table.concat(rows, "\n")
+end
+
+-- Tiled panes in layout order: left to right, top to bottom.
+local function tiled(node, out)
+  if node.block_id then
+    out[#out + 1] = node
+  else
+    tiled(node.split.before, out)
+    tiled(node.split.after, out)
+  end
+  return out
+end
+
+-- $1 digit art, $2 its SGR colour. The reader also gets $3 the pane to fall
+-- back to, $4 the panes in number order, $5 the other number floats to close.
+-- A new float can start at a default size and get its real one a moment
+-- later, so the art is redrawn whenever the size changes.
+local hop = [[
+export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
+art=$1 sgr=$2 orig=$3 panes=$4 others=$5 size= i=0
+draw() {
+  [ "$size" = "$(stty size)" ] && return
+  size=$(stty size)
+  set -- $size
+  printf '\033[?25l\033[2J\033[%d;1H\033[%sm' $((($1 - 5) / 2 + 1)) "$sgr"
+  printf '%s\n' "$art" | while IFS= read -r l; do printf '%*s%s\n' $((($2 - 6) / 2)) '' "$l"; done
+}
+while [ $i -lt 20 ]; do
+  draw
+  if [ -z "$orig" ]; then sleep 1
+  elif IFS= read -rsn1 -t 1 k; then break; fi
+  i=$((i + 1))
+done
+[ -n "$orig" ] || exit 0
+set -- $panes
+target=$orig
+case $k in [1-9]) [ "$k" -le $# ] && eval "target=\${$k}" ;; esac
+rex focus "$target" 2>/dev/null
+rex block close $others 2>/dev/null
+]]
+
+local function pane_hop(ctx)
+  local here, win = window_of(ctx), nil
+  for _, w in ipairs(assert(rex.session.view{}).windows) do
+    if w.window_id == here then win = w end
+  end
+  if win.zoomed_block_id then return end -- one pane on screen, nowhere to hop
+  local panes = {}
+  for _, l in ipairs(win.layers) do
+    if l.kind == "tiled" then panes = tiled(l.layout, {}) end
+  end
+  -- ponytail: one keypress picks, so 9 at most, as in tmux; a 10th pane gets no number.
+  while #panes > 9 do table.remove(panes) end
+
+  -- Float size in window fractions, for about 14x9 cells.
+  local first = panes[1]
+  local size = rex.block.call(terminal, "size", { block_id = first.block_id }) or {}
+  local w = math.min(14 * first.rect[3] / (size.columns or 80), 1)
+  local h = math.min(9 * first.rect[4] / (size.rows or 24), 1)
+  local function float(p, n, focus, extra)
+    local r = p.rect
+    local cmd = { "/bin/bash", "-c", hop, "hop", big(n), focus and "1;31" or "1;34" }
+    for _, a in ipairs(extra or {}) do cmd[#cmd + 1] = a end
+    return assert(rex.session.new_layer{
+      window_id = here,
+      bounds    = { r[1] + (r[3] - w) / 2, r[2] + (r[4] - h) / 2, w, h },
+      focus     = focus,
+      layout    = rex.layout.block{
+        flavor  = "com.superlogical.terminal.shell",
+        options = { shell = "none", command = cmd },
+      },
+    }).block_ids[1]
+  end
+
+  local reader, ids, others = #panes, {}, {}
+  for i, p in ipairs(panes) do
+    ids[i] = p.block_id
+    if p.block_id == ctx.block_id then reader = i end
+  end
+  for i, p in ipairs(panes) do
+    if i ~= reader then others[#others + 1] = float(p, i, false) end
+  end
+  float(panes[reader], reader, true, { ctx.block_id, table.concat(ids, " "), table.concat(others, " ") })
+end
+
+-- herdr splits prefix+q the same way: inside the scratch it hides it.
+rex.action{
+  name  = "scratch_hide_or_hop",
+  title = "Hide Scratch / Number Panes",
+  run   = function(ctx)
+    local b = scratch_of(ctx.session_id)
+    if b and b.block_id == ctx.block_id then return hide_scratch(ctx) end
+    pane_hop(ctx)
+  end,
+}
+rex.bind("ctrl+b>q", "scratch_hide_or_hop")
 
 -- New tabs, after herdr-smart-tab. Each opens in the current pane's directory
 -- and is shown once it is in place.
