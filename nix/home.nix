@@ -45,6 +45,7 @@ in
       gopls
       gotools
       isort
+      jj
       jq
       just
       libnotify
