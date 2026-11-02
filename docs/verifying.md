@@ -63,6 +63,73 @@ write still lands in the repository directory the watcher is not looking at.
 - **fish** — verify `command -v` and variables in a fresh login shell
   (`fish -l -c '...'`), not in the current one.
 
+## On NixOS the build reads a Git revision, not your working tree
+
+This one is not about a stale process. The file on disk is correct, the rebuild
+succeeds, and the package is still missing.
+
+`/etc/nixos` consumes this repository as a flake input, declared as a Git
+submodule whose `.gitmodules` URL is GitHub, with `self.submodules = true` in
+its `flake.nix`. Nix therefore resolves the submodule **by revision from
+GitHub**. Anything that lives only in the working tree -- including a brand-new
+module directory -- never reaches the store.
+
+Adding `jj` cost two rebuilds before this was found. `nixos-rebuild switch`
+exited 0 both times and `/run/current-system` was re-created (mtime moved), but
+the symlink target was byte-identical, so nothing had changed. `command -v jj`
+stayed empty while the edit sat in `nix/home.nix`.
+
+`--refresh` does not help: it invalidates flake input caches, not a `rev`-pinned
+submodule. `nixos-rebuild` never reads the checkout at all.
+
+Read the input Nix will actually use, which is the fastest way to tell this
+apart from a stale process:
+
+```bash
+P=$(nix flake metadata --json | jq -r .path)
+grep -n 'jj' "$P/vendor/dotfiles/nix/home.nix"
+```
+
+A local commit that is not on GitHub yet fails loudly instead of silently:
+
+```
+error: Cannot find Git revision '60cf6a3...' in ref 'master' of
+       repository 'https://github.com/youguanxinqing/dotfiles.git'
+```
+
+The order is: commit here, run `scripts/check-private.sh`, push, then advance the
+gitlink in `/etc/nixos` (`git add vendor/dotfiles && git commit`) and rebuild.
+A push that is rejected because the remote moved is normal on a long-lived
+machine -- rebase onto `origin/master` rather than forcing, then confirm the
+commit still touches what you meant.
+
+### The installer path does not work this way
+
+None of the above applies to macOS or to Linux without Nix. There, `install.sh`
+links straight out of the checkout, and discovery does not consult GitHub at all:
+`discover_modules` globs `modules/*/module.ini`, and `scripts/module-engine.sh`
+links files from `git ls-files --cached --others --exclude-standard`, a
+combination that includes untracked-but-not-ignored files. Editing a config or
+adding a module directory and rerunning `./install.sh` takes effect
+immediately, with no commit and no push.
+
+So the push requirement is a property of the NixOS flake input, not a rule of
+this repository. Do not "fix" a NixOS staleness report by telling someone to
+commit when they are on the installer path.
+
+A machine that builds locally can drop the push step by pointing the input at
+the checkout instead of GitHub:
+
+```nix
+dotfiles = {
+  url = "git+file:///etc/nixos/vendor/dotfiles";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+That trades a network round-trip for a hardcoded path, and still requires a
+commit -- `git+file` filters through Git exactly like the GitHub URL does.
+
 ## Do not let probes contaminate what you are measuring
 
 Running `tmux -L <sock> list-keys` across a directory of socket files starts a

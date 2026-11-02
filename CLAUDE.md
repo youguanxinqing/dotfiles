@@ -57,5 +57,6 @@ on PATH may be 5.x and will happily accept bash 4+ syntax that 3.2 rejects.
   `docs/structure.md`
 - Adding a tool or plugin, changing a version ref, or investigating why one
   machine behaves differently from another → `docs/dependencies.md`
-- Confirming a change actually took effect, or a long-running process still
-  serving the config it read at startup → `docs/verifying.md`
+- Confirming a change actually took effect, a long-running process still
+  serving the config it read at startup, or a NixOS rebuild that succeeds
+  without picking up an edit → `docs/verifying.md`
