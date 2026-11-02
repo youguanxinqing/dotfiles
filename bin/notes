@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# notes — 在笔记目录里搜，回车用 Sublime 打开命中行
+set -uo pipefail
+
+ROOT=${NOTES_ROOT:-$HOME/Documents/sync-notes/work-sync/scratch}
+CTX=10
+REGEX=0
+PRINT=0
+PLAIN=0
+NUM=0
+
+# 模糊档的喂料：每个文件一条"文件名行"（path:1:basename）+ 全部内容行。
+# 配合 --nth=3.. ：内容行只拿内容去匹配，文件名行只拿文件名去匹配。
+# 于是文件名命中只占 1 行，而不是把那个文件的每一行都拖出来。
+#
+# 两段都按修改时间倒序（--sortr modified）：reverse 布局下第一条贴着 prompt，
+# 空查询时"刚写完的那篇"就在第一行，往下翻也是从新到旧。rg 自己的顺序是文件
+# 系统遍历序，没有意义。排序会关掉 rg 的多线程，这个体量的库上无所谓。
+#
+# 只吃 cwd，不 cd —— fzf 的 reload 本来就跑在 ROOT 里。
+if [[ ${1:-} == --feed ]]; then
+    rg --files --sortr modified . 2>/dev/null | awk -F/ '{print $0 ":1:" $NF}'
+    rg -n --no-heading --color=always -S --no-messages --sortr modified -e '' . 2>/dev/null
+    exit
+fi
+
+usage() {
+    cat <<'EOF'
+用法: notes [-C N] [-d DIR] [-r] [-p] [关键词/正则]
+  -r     把参数当 rg 正则先筛一遍，再进 fzf
+  -p     不进 fzf，打印 rg -C N 结果（tty 下走 less，管道时自动纯文本）
+  -P     直接输出到 stdout，不分页（tty 下保留高亮，管道时自动纯文本）
+  -n     打印模式下带行号（默认不带）
+  -C N   上下文行数，默认 10（同时决定下方预览窗高度）
+  -d DIR 搜索根，默认 $NOTES_ROOT 或 work-sync/scratch
+fzf 内:
+  ctrl-n / ctrl-p  下移 / 上移
+  ctrl-s  当前输入转 rg 正则重跑    ctrl-o  回到全量模糊
+  ctrl-t  切换匹配范围（只匹配内容 <-> 整行都匹配，想按路径筛时用）
+  ctrl-/  开关预览                  tab     多选，回车一次全开
+EOF
+}
+
+# 缺工具时报一句人话，而不是让 rg/fzf 的报错自己飘上来。
+need() {
+    command -v "$1" >/dev/null 2>&1 || { echo "notes: 需要 $1，PATH 里找不到" >&2; exit 1; }
+}
+
+SELF=$(cd "$(dirname "$0")" 2>/dev/null && pwd)/${0##*/}   # cd 之前先定住自己
+
+while getopts ':C:d:rpPnh' o; do
+    case $o in
+        C) CTX=$OPTARG ;;
+        d) ROOT=$OPTARG ;;
+        r) REGEX=1 ;;
+        p) PRINT=1 ;;
+        P) PRINT=1; PLAIN=1 ;;
+        n) NUM=1 ;;
+        h) usage; exit 0 ;;
+        *) echo "notes: 未知参数 -$OPTARG" >&2; exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+need rg
+cd "$ROOT" 2>/dev/null || { echo "notes: 搜索根不存在: $ROOT" >&2; exit 1; }
+
+if (( PRINT )); then
+    (( $# )) || { echo "notes -p/-P 需要一个正则" >&2; exit 2; }
+    num=--no-line-number; (( NUM )) && num=-n   # rg 在 tty 下会自动开行号，得显式关掉；关掉后 : / - 前缀也没了
+    if (( PLAIN )) || [[ ! -t 1 ]]; then
+        rg -S -C "$CTX" --heading $num -- "$*" .
+    else
+        rg -S -C "$CTX" --heading $num --color=always -- "$*" . | less -R
+    fi
+    exit
+fi
+
+need fzf
+need bat
+need subl
+
+# 下面几个要 export：预览和 reload 是 fzf 用 bash -c 另起的进程，
+# --bind/--preview 是单引号，$NOTES_* 在那边才展开
+export NOTES_CTX=$CTX
+export NOTES_SELF=$SELF
+export NOTES_RG="rg -n --no-heading --color=always -S --no-messages --sortr modified"
+
+# 模糊档: 一次灌满，之后按键全在内存里过滤，零 fork
+# 正则档: rg 先筛（不掺文件名行），query 留空让你继续模糊收窄
+if (( REGEX )); then
+    feed(){ $NOTES_RG -e "$*" . 2>/dev/null; }
+    q=''; prompt="rg:$*> "
+else
+    feed(){ "$SELF" --feed; }
+    q="$*"; prompt='fuzzy> '
+fi
+
+# 预览窗按 CTX 精确定高：2*CTX+1 行正文 + 边框，不浪费列表空间
+sel=$(feed "$@" | fzf \
+    --ansi --delimiter=: --nth='3..' --multi --layout=reverse \
+    --prompt="$prompt" --query="$q" \
+    --with-shell 'bash -c' \
+    --preview 'f={1}; n={2}; bat --color=always --style=numbers --paging=never \
+               --highlight-line "$n" \
+               --line-range "$(( n > NOTES_CTX ? n - NOTES_CTX : 1 )):$(( n + NOTES_CTX ))" "$f"' \
+    --preview-window "down,$((2 * CTX + 3)),border-top" \
+    --bind 'ctrl-n:down' --bind 'ctrl-p:up' \
+    --bind 'ctrl-s:transform-prompt(printf "rg:%s> " {q})+reload($NOTES_RG -e {q} . 2>/dev/null)+clear-query' \
+    --bind 'ctrl-o:change-prompt(fuzzy> )+reload("$NOTES_SELF" --feed)+clear-query' \
+    --bind 'ctrl-t:change-nth(3..|)' \
+    --bind 'ctrl-/:toggle-preview')
+
+[[ -n $sel ]] || exit 130
+
+# 一次全交给 subl：一个进程就是一次 app 激活，多选 5 个只闪一下，
+# 而不是 5 次往返、窗口在别处来回抢焦点。
+targets=()
+while IFS=: read -r file line _; do
+    [[ -n $file ]] && targets+=("$file:$line")   # subl 认 path:line
+done <<<"$sel"
+(( ${#targets[@]} )) && subl "${targets[@]}"
