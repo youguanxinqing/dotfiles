@@ -40,3 +40,16 @@ fi
 : > "$TEST_LOG"
 run clean >/dev/null
 [ "$(cat "$TEST_LOG")" = 'remove npm:pi-open-tui' ] || die "Pi clean touched undeclared packages."
+
+# 扩展是仓库里的文件，不是 npm 包：新机器和装派时只跑一次 install.sh，就要能直接敲
+# /clear。home/ 覆盖链接负责这一步，这里断言链接真的落地了。
+CLEAR_SOURCE="$ROOT/modules/pi/home/.pi/agent/extensions/clear.ts"
+LINK_HOME="$TEST_ROOT/link-home"
+mkdir -p "$LINK_HOME"
+HOME="$LINK_HOME" DOTFILES_STATE_FILE="$TEST_ROOT/link-state.tsv" \
+  "$ROOT/install.sh" --links-only pi >/dev/null
+assert_link "$LINK_HOME/.pi/agent/extensions/clear.ts" "$CLEAR_SOURCE"
+
+# 文件存在还不够：它必须还注册着 /clear 这个名字，重命名不能悄悄发生。
+grep -Fq 'registerCommand("clear"' "$CLEAR_SOURCE" ||
+  die "The Pi clear extension no longer registers /clear."
