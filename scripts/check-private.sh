@@ -39,7 +39,12 @@ check() {
 check "secret" 'BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|BEGIN PGP PRIVATE KEY BLOCK|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9-]{20,}'
 check "personal home path" '/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/'
 check "email address" '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
-check "private network address" '(^|[^0-9])(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)[0-9]'
+# A full dotted quad in a private range, nothing shorter. The first two octets
+# alone (`10.`, `192.168.`) also match version strings: `v0.10.0` in the Herdr
+# plugin list was reported as a private address. Four octets, and no adjacent
+# digit or dot on either side, so `1.10.0.0` is a version and `10.0.0.5` is a
+# host. Public neighbours such as 172.32.0.1 stay clean.
+check "private network address" '(^|[^0-9.])(10(\.[0-9]{1,3}){3}|(172\.(1[6-9]|2[0-9]|3[01])|192\.168)(\.[0-9]{1,3}){2})([^0-9]|$)'
 
 ((failed == 0)) || exit 1
 echo "No obvious private data found in public files."
