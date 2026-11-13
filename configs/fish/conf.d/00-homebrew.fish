@@ -8,3 +8,9 @@ if not set -q HOMEBREW_PREFIX
         end
     end
 end
+# A parent that exported HOMEBREW_PREFIX can still hand over a PATH without
+# Homebrew (launchd-started servers do). Add what is missing, but never move
+# entries a caller put first on purpose.
+if test -n "$HOMEBREW_PREFIX"
+    fish_add_path --global --path $HOMEBREW_PREFIX/bin $HOMEBREW_PREFIX/sbin
+end
