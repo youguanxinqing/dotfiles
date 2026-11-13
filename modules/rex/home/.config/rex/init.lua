@@ -59,8 +59,9 @@ local function tab_rows(current)
   -- connection, which is attached everywhere -- so attach_all here changes
   -- nothing the app relies on.
   for _, s in ipairs(assert(rex.call("session.attach_all", { event_scope = "session" })).sessions) do
-    local view = rex.session.view{ session_id = s.session_id } or { windows = {} }
-    for i, w in ipairs(view.windows) do
+    -- A session with no windows comes back without a windows field at all.
+    local view = rex.session.view{ session_id = s.session_id } or {}
+    for i, w in ipairs(view.windows or {}) do
       local q = { session_id = s.session_id, block_id = w.focused_block_id }
       local named = is_named(w)
       local title = named and w.label or (rex.block.call(terminal, "title", q) or {}).title or ""
