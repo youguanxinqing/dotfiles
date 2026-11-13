@@ -12,6 +12,20 @@ if test "$kernel_name" = Linux
     end
 end
 
+# A Rex pane on any host but the home Mac is viewed from the home Mac. codex and
+# pi copy only into this host's clipboard unless they think the terminal is
+# remote; then they also send OSC 52, which Rex carries to the viewer. (Claude
+# Code always sends it.) pi has a knob for this; codex reads only SSH_TTY,
+# SSH_CONNECTION, TMUX and HERDR_ENV, and SSH_TTY is the one that is true here.
+# The home Mac is left out: tools such as gcloud stop opening a browser when
+# they see SSH_TTY.
+if test "$TERM_PROGRAM" = rex; and not string match -q 'GuandeMacBook-Pro*' -- $hostname
+    set -gx PI_CLIPBOARD_OSC52 1
+    if not set -q SSH_TTY; and set -l pane_tty (tty)
+        set -gx SSH_TTY $pane_tty
+    end
+end
+
 if test "$is_wsl2" = true
     set -l nameserver (awk '/nameserver/ {print $2; exit}' /etc/resolv.conf 2>/dev/null)
     if test -n "$nameserver"
