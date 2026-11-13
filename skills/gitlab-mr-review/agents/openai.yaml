@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitLab MR Review"
+  short_description: "Review GitLab MRs with glab CLI."
+  default_prompt: "Review this GitLab merge request and report findings first, with concrete file references when possible."
