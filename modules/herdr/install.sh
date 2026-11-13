@@ -28,6 +28,7 @@ youguanxinqing/herdr-flash|main|youguanxinqing.herdr-flash
 youguanxinqing/herdr-hop|main|youguanxinqing.herdr-hop
 ChmaraX/herdr-nvim|v1.0.0|chmarax.herdr-nvim
 martin-ro/herdr-next-agent|main|martinro.next-agent
+qintmb/herdr-theme-picker|v0.10.0|herdr-theme-picker
 '
 # 关于上面的 main：它们当初就是不带 ref 装的（走默认分支），而且 herdr-scratch 的
 # main 已经跑在 v1.0.1 tag 前面了 —— 写 v1.0.1 反而会把新机器装回更旧的代码。
