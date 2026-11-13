@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+#
+# cargo，但把 git 依赖换成本地 checkout —— 仓库本身完全不知道。
+#
+# 用法：在 worktree 根目录放 .cargo-local（每行一个本地 checkout 的路径，可以写 ~），
+# 再让 direnv 把这个目录放到 PATH 前面（.envrc 里 `PATH_add ~/.local/libexec/cargo-local`）。
+# 没有 .cargo-local 的目录里它就是原样的 cargo。
+#
+# 为什么是 `paths` 而不是 [patch]：[patch] 会改写 Cargo.lock，`--locked`（make check）
+# 随即失败，git status 也一直脏着；`paths` 是解析完再换源，Cargo.lock 一个字不动。
+# 代价是 Cargo 对「本地版改了依赖表」会打几条 path override 警告；本地改动如果新增了
+# lock 里没有的依赖，`paths` 就做不到了，那时只能临时用 [patch]。
+#
+# --config 插在子命令后面而不是 cargo 后面：`cargo --config X nextest run` 传不到
+# nextest 内部调用的 cargo，`cargo nextest run --config X` 才行；内建子命令两种都认。
+set -euo pipefail
+
+# 真正的 cargo 是 PATH 上这个目录之后的那个。
+self_dir="$(dirname -- "$0")"
+clean_path=''
+IFS=: read -r -a entries <<<"$PATH"
+for entry in "${entries[@]}"; do
+  [ "${entry%/}" = "${self_dir%/}" ] && continue
+  clean_path="${clean_path:+$clean_path:}$entry"
+done
+PATH="$clean_path"
+
+top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$top" ] || [ ! -f "$top/.cargo-local" ] || [ ! -f "$top/Cargo.lock" ]; then
+  exec cargo "$@"
+fi
+
+# lock 里取自 git 的包：名字和锁定的提交。
+git_crates="$(awk '
+  /^\[\[package\]\]/ { name = "" }
+  /^name = /         { gsub(/"/, "", $3); name = $3 }
+  /^source = "git\+/ { split($3, at, "#"); gsub(/"/, "", at[2]); print name, at[2] }
+' "$top/Cargo.lock")"
+
+paths=''
+count=0
+while read -r checkout || [ -n "$checkout" ]; do
+  case "$checkout" in '' | '#'*) continue ;; esac
+  checkout="${checkout/#\~/$HOME}"
+  [ -d "$checkout" ] || { echo "cargo-local: no such checkout: $checkout" >&2; exit 1; }
+  pinned=''
+  # 本地 checkout 里每个包的名字和目录，只留 lock 里取自 git 的那些。
+  while read -r manifest; do
+    name="$(awk '/^\[package\]/ { p = 1; next } /^\[/ { p = 0 } p && /^name *=/ { gsub(/[" ]/, ""); sub(/^name=/, ""); print; exit }' "$manifest")"
+    rev="$(printf '%s\n' "$git_crates" | awk -v n="$name" '$1 == n { print $2; exit }')"
+    [ -n "$rev" ] || continue
+    pinned="$rev"
+    paths="${paths:+$paths,}\"$(dirname -- "$manifest")\""
+    count=$((count + 1))
+  done < <(find "$checkout" -name Cargo.toml -not -path '*/target/*' -not -path '*/node_modules/*' -not -path '*/.git/*')
+  # 本地分支没有包含仓库锁定的那个提交，多半就编不过：提前说一声。
+  if [ -n "$pinned" ] && [ -t 2 ] && ! git -C "$checkout" merge-base --is-ancestor "$pinned" HEAD 2>/dev/null; then
+    echo "cargo-local: $checkout does not contain the pinned ${pinned:0:8}; rebase it onto that first" >&2
+  fi
+done <"$top/.cargo-local"
+
+if [ "$count" -eq 0 ]; then
+  exec cargo "$@"
+fi
+[ -t 2 ] && echo "cargo-local: $count crates from $(paste -sd' ' "$top/.cargo-local")" >&2
+
+config="paths=[$paths]"
+toolchain=()
+case "${1:-}" in +*) toolchain=("$1"); shift ;; esac
+case "${1:-}" in
+  '' | -*) exec cargo "${toolchain[@]+"${toolchain[@]}"}" --config "$config" "$@" ;;
+  # 只有解析依赖的子命令要 --config；fmt、sweep 这类不认它，走到最后原样转。
+  build | b | check | c | test | t | run | r | clippy | doc | d | bench | rustc | rustdoc | \
+    tree | metadata | fetch | fix | update)
+    exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$1" --config "$config" "${@:2}" ;;
+  nextest)
+    if [ $# -ge 2 ] && [ "${2#-}" = "$2" ]; then
+      exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$1" "$2" --config "$config" "${@:3}"
+    fi
+    # `cargo nextest --version` 这类不带子命令的：nextest 在那个位置不认 --config，也什么都不编。
+    exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$@"
+    ;;
+esac
+exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$@"
