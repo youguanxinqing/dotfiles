@@ -419,3 +419,48 @@ rex.bind("cmd+t", "tab_new_named")
 -- type for it (opt+u is a dead key on US layouts).
 rex.bind("ctrl+alt+[KeyU]", "pane.send_key", { key = "pageup" })
 rex.bind("ctrl+alt+[KeyD]", "pane.send_key", { key = "pagedown" })
+
+-- ctrl+v in a pane on another host pastes the Mac's clipboard image there
+-- (herdr's remote_image_paste). An agent CLI on that host reads its own
+-- clipboard, which never holds the Mac's screenshot. Shortcuts follow the home
+-- server, so this action runs here on the Mac even for a remote pane: ctx.server
+-- names the pane's host, and rex.call goes there through the app. The image goes
+-- over ssh and its path is pasted; Claude Code and Codex attach a pasted image
+-- path. A local pane, or a clipboard with no image, gets a plain ctrl+v.
+local function send_ctrl_v() rex.client.queue("pane.send_key", { key = "ctrl+v" }) end
+
+-- $1: ssh host. Prints the image's path on that host; exits 3 when the
+-- clipboard has no image. The Mac temp file's random suffix names the copy.
+local push_clipboard_image = [[
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+f=$(mktemp -t rex-clip) || exit 1
+trap 'rm -f "$f"' EXIT
+pngpaste - >"$f" 2>/dev/null || exit 3
+dst=/tmp/rex-clipboard-images/${f##*.}.png
+ssh -o BatchMode=yes -o ConnectTimeout=5 "$1" "umask 077 && mkdir -p ${dst%/*} && cat >$dst" <"$f" &&
+  printf %s "$dst"
+]]
+
+-- Rex host label -> ssh alias, for hosts whose two names differ. A label
+-- missing here is used as the ssh host as is (nixos is both). The Air's label
+-- comes from its hostname, but ssh only knows it as `air`, whose HostKeyAlias
+-- is what known_hosts records.
+local ssh_alias = { ["guans-macbook-air"] = "air" }
+
+rex.action{
+  name  = "remote_image_paste",
+  title = "Paste Clipboard Image",
+  run   = function(ctx)
+    if not ctx.server then return send_ctrl_v() end
+    local host = ssh_alias[ctx.server] or ctx.server
+    local r = rex.exec{ "/bin/sh", "-c", push_clipboard_image, "sh", host }
+    if r.code == 3 then return send_ctrl_v() end
+    assert(r.ok, "remote_image_paste: " .. r.stderr)
+    assert(rex.call("block.event", {
+      session_id = ctx.session_id,
+      block_id   = ctx.block_id,
+      event      = { type = "paste", payload = { text = r.stdout } },
+    }))
+  end,
+}
+rex.bind("ctrl+v", "remote_image_paste")
