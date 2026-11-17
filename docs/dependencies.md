@@ -3,6 +3,22 @@
 Read this when adding a tool or plugin, changing a version ref, or investigating
 why one machine behaves differently from another.
 
+## NixOS agent CLI discovery
+
+`nix/home.nix` installs Claude Code and OpenCode through Home Manager. Its
+activation links the available `claude`, `opencode`, and `pi` executables from
+the user profile or `/run/current-system/sw` into `~/.local/bin`. Pi is supplied
+by the machine's NixOS package set. These links follow profile upgrades and
+preserve existing local files.
+
+Both `home.sessionPath` and `systemd.user.sessionVariables.PATH` include
+`~/.local/bin`, so shell and desktop launches can find these entry points.
+NixOS-generated systemd units can override the session PATH; a machine's T3
+unit must also include `path = [ "%h/.local" ];`. Enable
+`environment.localBinInPath = true;` in the machine configuration for NixOS's
+login environment. An already running service keeps its original PATH until
+it restarts.
+
 ## Refs point at what upstream publishes, not at a commit
 
 Use a tag where one exists, the default branch otherwise. Pinning a commit only

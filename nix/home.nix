@@ -30,6 +30,7 @@ in
       bat
       black
       cargo
+      claude-code
       clang-tools
       cmake
       delta
@@ -135,6 +136,10 @@ in
 
   home.sessionPath = lib.mkAfter [ "$HOME/.local/bin" ];
 
+  # Desktop apps and user services do not read the shell's sessionPath.
+  systemd.user.sessionVariables.PATH =
+    "${config.home.homeDirectory}/.local/bin:\${PATH}";
+
   home.file = lib.mapAttrs' (name: source:
     lib.nameValuePair ".pi/agent/nix-packages/${name}" { inherit source; }
   ) piPackages // {
@@ -144,6 +149,28 @@ in
       recursive = true;
     };
   };
+
+  # Keep agent entry points available to launchers that search ~/.local/bin.
+  # Profile paths survive upgrades; leave unrelated local executables alone.
+  home.activation.agentCliLinks = lib.hm.dag.entryAfter [ "writeBoundary" "linkGeneration" ] ''
+    run mkdir -p ${lib.escapeShellArg "${config.home.homeDirectory}/.local/bin"}
+    for cli in claude opencode pi; do
+      target=""
+      for profile in ${lib.escapeShellArg config.home.profileDirectory} /run/current-system/sw; do
+        if [ -x "$profile/bin/$cli" ]; then
+          target="$profile/bin/$cli"
+          break
+        fi
+      done
+      [ -n "$target" ] || continue
+      destination=${lib.escapeShellArg "${config.home.homeDirectory}/.local/bin"}/"$cli"
+      if [ -e "$destination" ] && [ ! -L "$destination" ]; then
+        echo "Keeping existing executable: $destination" >&2
+        continue
+      fi
+      run ln -sfn "$target" "$destination"
+    done
+  '';
 
   # Pi writes model choices and resource filters here. Merge only our packages
   # rather than replacing settings.json with a read-only store symlink.
