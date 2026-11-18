@@ -323,8 +323,8 @@ rex.bind("ctrl+b>q", "scratch_hide_or_hop")
 
 -- ctrl+b s: flash over the pane's visible text (herdr's prefix+s): type to
 -- narrow, a label lands the cursor, v/hjkl/wbe/t/f select, y copies over OSC 52,
--- which Rex hands to the Mac's clipboard. rex-flash (~/Projects/rex-flash) is
--- herdr-flash's picker run in a float laid exactly over the pane, at its size in
+-- which Rex hands to the Mac's clipboard. rex-flash (github.com/youguanxinqing/
+-- rex-flash, installed by modules/rex/install.sh) is herdr-flash's picker run in a float laid exactly over the pane, at its size in
 -- cells, so its frame lines up with the text it captured. The float runs on the
 -- pane's host, so rex-flash must be installed there too (~/.local/bin). The
 -- capture happens there too: the block's format method returns the whole
