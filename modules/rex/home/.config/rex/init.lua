@@ -56,7 +56,7 @@ end
 -- pane's host, so PATH has to find rex, fzf and bash on the Mac and on NixOS
 -- (which has no /bin/bash; tools live in per-user profiles).
 local SH_PATH = [[
-export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
+export PATH="$REX_BIN_DIR:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
 ]]
 
 -- The app, for `rex -C` in a floating pane on the pane's host. In a remote pane
@@ -320,6 +320,81 @@ rex.action{
   end,
 }
 rex.bind("ctrl+b>q", "scratch_hide_or_hop")
+
+-- ctrl+b s: flash over the pane's visible text (herdr's prefix+s): type to
+-- narrow, a label lands the cursor, v/hjkl/wbe/t/f select, y copies over OSC 52,
+-- which Rex hands to the Mac's clipboard. rex-flash (~/Projects/rex-flash) is
+-- herdr-flash's picker run in a float laid exactly over the pane, at its size in
+-- cells, so its frame lines up with the text it captured. The float runs on the
+-- pane's host, so rex-flash must be installed there too (~/.local/bin). The
+-- capture happens there too: the block's format method returns the whole
+-- scrollback, which is megabytes over Tailscale for a long-running shell.
+local flash = SH_PATH .. [[
+if command -v rex-flash >/dev/null; then
+  rex-flash --block "$1" --cols "$2" --rows "$3" ${4:+--screen "$4"} || read -r _
+else
+  echo "rex-flash is not installed on this host"; read -r _
+fi
+rex focus "$1" 2>/dev/null
+]]
+
+-- The last n lines of a capture: the screen, without the scrollback before it.
+local function last_rows(text, n)
+  local ends = {}
+  for i in text:gmatch("()\n") do ends[#ends + 1] = i end
+  if ends[#ends] ~= #text then ends[#ends + 1] = #text + 1 end
+  return text:sub((ends[#ends - n] or 0) + 1)
+end
+
+-- Where a block sits in its window, in window fractions. A zoomed block fills
+-- the window; a floating layer's layout is relative to the layer's bounds.
+local function block_bounds(win, block_id)
+  if win.zoomed_block_id == block_id then return { 0, 0, 1, 1 } end
+  for _, l in ipairs(win.layers) do
+    for _, p in ipairs(tiled(l.layout, {})) do
+      if p.block_id == block_id then
+        local b, r = l.bounds, p.rect
+        return { b[1] + r[1] * b[3], b[2] + r[2] * b[4], r[3] * b[3], r[4] * b[4] }
+      end
+    end
+  end
+end
+
+rex.action{
+  name  = "flash",
+  title = "Flash: Search Visible Text…",
+  run   = function(ctx)
+    local here, win = window_of(ctx), nil
+    for _, w in ipairs(assert(rex.session.view{}).windows) do
+      if w.window_id == here then win = w end
+    end
+    local bounds = assert(win and block_bounds(win, ctx.block_id), "flash: pane not on screen")
+    local size = assert(rex.block.call(terminal, "size", { block_id = ctx.block_id }))
+    -- A local block's text is an in-process call away, so the picker can paint
+    -- the moment its float starts instead of after a 20-40 ms rex capture. A
+    -- remote one would send its whole scrollback over Tailscale, so the float
+    -- captures it there. Past ~960 KiB format fails, and the float captures too.
+    local screen = ""
+    if not ctx.server then
+      local f = rex.block.call(terminal, "format", { block_id = ctx.block_id })
+      if f and f.content and not f.id then screen = last_rows(f.content, size.rows) end
+    end
+    assert(rex.session.new_layer{
+      window_id = here,
+      bounds    = bounds,
+      focus     = true,
+      layout    = rex.layout.block{
+        flavor  = "com.superlogical.terminal.shell",
+        -- Started at the pane's size: a float otherwise starts at 80x24, shows
+        -- blank, and waits for the app to resize it before the picker can paint.
+        options = { shell = "none", size = { columns = size.columns, rows = size.rows }, command = {
+          "/bin/sh", "-c", flash, "sh", ctx.block_id, tostring(size.columns), tostring(size.rows), screen,
+        } },
+      },
+    })
+  end,
+}
+rex.bind("ctrl+b>s", "flash")
 
 -- New tabs, after herdr-smart-tab. Each opens in the current pane's directory
 -- and is shown once it is in place.

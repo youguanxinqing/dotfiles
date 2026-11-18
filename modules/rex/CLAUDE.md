@@ -34,6 +34,11 @@ locally, or opens noticeably slower remotely, is a bug.
 - Keep probes read-only (`rex window list --json`, `client inspect`), and test
   shell snippets on nixos with `env -i HOME=$HOME USER=$USER /bin/sh`, which is
   close to what a floating pane starts with.
+- A new float starts at 80x24 and is resized to its bounds only while the app
+  shows it. A test float in a session nobody is looking at stays 80x24.
+- To test a floating script on another host without touching live panes, make
+  a throwaway session there (`rex -S nixos new test -- …`), float the script
+  over it from a `rex -S nixos do` script, then `rex -S nixos kill` it.
 - After an edit: `rex config check`, `rex config reload`. When a key fails,
   `rex server logs | grep 'client.action'` has the Lua error.
 - Before calling it done, ask the user to press the key in a remote pane;
