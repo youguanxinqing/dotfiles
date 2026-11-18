@@ -7,6 +7,10 @@ rex.bind("ctrl+b>ctrl+b", "pane.send_key", { key = "ctrl+b" })
 -- tmux muscle memory. Bindings match unshifted keys, so % is shift+5 and " is shift+'.
 rex.bind("ctrl+b>shift+5", "pane.split.right")
 rex.bind("ctrl+b>shift+'", "pane.split.down")
+-- herdr's defaults: prefix+v splits side by side, prefix+minus top and bottom.
+-- (prefix+h stays focus-left, as in herdr.)
+rex.bind("ctrl+b>v", "pane.split.right")
+rex.bind("ctrl+b>-", "pane.split.down")
 rex.bind("ctrl+b>x", "pane.close")
 -- herdr's prefix+N, but asking for the name first: the session picker's
 -- "Filter or create..." field creates a session from a name that matches none.
