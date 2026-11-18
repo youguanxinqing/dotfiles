@@ -23,12 +23,17 @@ rex.bind("ctrl+b>k", "pane.focus.up")
 rex.bind("ctrl+b>l", "pane.focus.right")
 
 -- ctrl+b f: fuzzy-jump to any tab in any session (herdr's prefix+f). Rex has no
--- tab picker, so fzf runs in a floating pane. Two Rex 0.1.0 (1696) facts shape it:
+-- tab picker, so fzf runs in a floating pane. Rex 0.1.0 (1696) facts that shape it:
 -- * run must return at once. The app holds back every later key until a key's
 --   action returns, so waiting for the pick inside run deadlocks the picker.
 -- * The app ignores server-side focus (`rex window focus` moves the server's
 --   active window, not the view), so the picker must switch through the client
 --   action session.select -- from the CLI, which needs Remote Control on.
+-- * The tab list is built by the picker, on the pane's own host, with
+--   `rex do -e`. In a pane on another host the action itself runs here on the
+--   Mac (see remote_image_paste), and each of its calls there is a round trip
+--   through the app; listing tabs from here took one per tab, and was slow.
+--   The picker reaches the app through app_client.
 local terminal = "com.superlogical.terminal"
 
 -- The pane's last reported cwd, from its file:// URL.
@@ -43,6 +48,29 @@ local function window_of(ctx)
   return assert(rex.session.describe_block{ block_id = ctx.block_id }).block.window_id
 end
 
+-- Every floating pane's script starts with this. The pane runs on the key's
+-- pane's host, so PATH has to find rex, fzf and bash on the Mac and on NixOS
+-- (which has no /bin/bash; tools live in per-user profiles).
+local SH_PATH = [[
+export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
+]]
+
+-- The app, for `rex -C` in a floating pane on the pane's host. In a remote pane
+-- ctx.client_id is the Mac server's ID, which that host doesn't know, so the
+-- app's label stands in. rex.exec runs here on the Mac, so its rex talks to
+-- the Mac's server; a key's action gets neither REX_BIN_DIR nor HOME (only
+-- `rex do` passes them), so fall back to where the app installs the server.
+local function app_client(ctx)
+  if not ctx.server then return ctx.client_id or "" end
+  local r = rex.exec{ "/bin/sh", "-c", [[
+    export HOME=${HOME:-$2}
+    bin=${REX_BIN_DIR:-"$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS"}
+    "$bin/rex" client inspect "$1" | sed -n 's/^label: *//p']], "sh", ctx.client_id or "", os.getenv("HOME") }
+  local label = r.ok and r.stdout:gsub("%s+$", "") or ""
+  assert(label ~= "", "no label for app client " .. tostring(ctx.client_id) .. ": " .. r.stderr)
+  return label
+end
+
 -- Whether a tab was given a name, rather than keeping the default label made
 -- from its ID ("Window 8762a745").
 local function is_named(w)
@@ -51,29 +79,26 @@ end
 
 -- A renamed tab shows its name. An unnamed one keeps the default label made from
 -- its ID ("Window 8762a745") and shows its focused pane's title instead.
-local function tab_rows(current)
-  local home = os.getenv("HOME")
-  local rows = {}
-  -- A session's windows are readable only on a stream attached to it. An action
-  -- gets a stream of its own, attached to its session alone -- not the app's
-  -- connection, which is attached everywhere -- so attach_all here changes
-  -- nothing the app relies on.
-  for _, s in ipairs(assert(rex.call("session.attach_all", { event_scope = "session" })).sessions) do
-    -- A session with no windows comes back without a windows field at all.
-    local view = rex.session.view{ session_id = s.session_id } or {}
-    for i, w in ipairs(view.windows or {}) do
-      local q = { session_id = s.session_id, block_id = w.focused_block_id }
-      local named = is_named(w)
-      local title = named and w.label or (rex.block.call(terminal, "title", q) or {}).title or ""
-      local pwd = pwd_of(q)
-      if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
-      rows[#rows + 1] = table.concat({
-        s.session_id, w.window_id, (w.window_id == current and "*" or " ") .. i, s.label or "", title, pwd,
-      }, "\t")
-    end
+-- Prints one row per tab; CURRENT is replaced by the window the key came from.
+local TAB_ROWS = [==[
+local terminal, current, home = "com.superlogical.terminal", "CURRENT", os.getenv("HOME")
+-- A session's windows are readable only on a stream attached to it.
+for _, s in ipairs(assert(rex.call("session.attach_all", { event_scope = "session" })).sessions) do
+  -- A session with no windows comes back without a windows field at all.
+  local view = rex.session.view{ session_id = s.session_id } or {}
+  for i, w in ipairs(view.windows or {}) do
+    local q = { session_id = s.session_id, block_id = w.focused_block_id }
+    local title = w.label ~= "Window " .. w.window_id:sub(-8) and w.label
+      or (rex.block.call(terminal, "title", q) or {}).title or ""
+    local url = (rex.block.call(terminal, "pwd", q) or {}).pwd or ""
+    local pwd = url:gsub("^file://[^/]*", ""):gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
+    if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
+    print(table.concat({
+      s.session_id, w.window_id, (w.window_id == current and "*" or " ") .. i, s.label or "", title, pwd,
+    }, "\t"))
   end
-  return rows
 end
+]==]
 
 -- When a focused pane closes or is detached, Rex focuses some other block in its
 -- window -- the newest, not the one focused before. So each floating prompt
@@ -81,10 +106,8 @@ end
 --
 -- Fields 1-2 are the IDs: hidden from fzf, then cut back out of its pick.
 -- A failed select (Remote Control off) keeps its error on screen until Enter.
-local picker = [[
-export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-pick=$(fzf --delimiter='\t' --with-nth=3.. --layout=reverse --prompt='tab> ' <"$1")
-rm -f "$1"
+local picker = SH_PATH .. [[
+pick=$(rex do -e "$1" | fzf --delimiter='\t' --with-nth=3.. --layout=reverse --prompt='tab> ')
 rex focus "$3" 2>/dev/null
 [ -n "$pick" ] || exit 0
 s=$(printf '%s\n' "$pick" | cut -f1)
@@ -96,11 +119,7 @@ rex.action{
   name  = "tab_jump",
   title = "Jump to Tab…",
   run   = function(ctx)
-    local here = window_of(ctx)
-    local rows_path = os.tmpname()
-    local f = assert(io.open(rows_path, "w"))
-    f:write(table.concat(tab_rows(here), "\n"), "\n")
-    f:close()
+    local here, client = window_of(ctx), app_client(ctx)
     assert(rex.session.new_layer{
       window_id = here,
       bounds    = { 0.2, 0.15, 0.6, 0.5 },
@@ -108,7 +127,7 @@ rex.action{
       layout    = rex.layout.block{
         flavor  = "com.superlogical.terminal.shell",
         options = { shell = "none", command = {
-          "/bin/sh", "-c", picker, "sh", rows_path, ctx.client_id, ctx.block_id,
+          "/bin/sh", "-c", picker, "sh", (TAB_ROWS:gsub("CURRENT", here)), client, ctx.block_id,
         } },
       },
     })
@@ -225,7 +244,6 @@ end
 -- never get a key wait in read -- with the default IFS, which the trap's word
 -- splitting runs under.
 local hop = [[
-export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 art=$1 sgr=$2 orig=$3 panes=$4 others=$5
 draw() {
   printf '\033[?25l\033[2J\033[%d;1H\033[%sm' $((($1 - 5) / 2 + 1)) "$sgr"
@@ -263,7 +281,7 @@ local function pane_hop(ctx)
   local h = math.min(9 * first.rect[4] / (size.rows or 24), 1)
   local function float(p, n, focus, extra)
     local r = p.rect
-    local cmd = { "/bin/bash", "-c", hop, "hop", big(n), focus and "1;31" or "1;34" }
+    local cmd = { "/bin/sh", "-c", SH_PATH .. 'exec bash -c "$@"', "sh", hop, "hop", big(n), focus and "1;31" or "1;34" }
     for _, a in ipairs(extra or {}) do cmd[#cmd + 1] = a end
     return assert(rex.session.new_layer{
       window_id = here,
@@ -329,8 +347,8 @@ local function renumber_group(base)
 end
 
 -- Opens a tab at the end and returns its ID. The caller shows it last.
-local function open_tab(ctx, label, cwd)
-  cwd = cwd or pwd_of({ block_id = ctx.block_id })
+local function open_tab(ctx, label)
+  local cwd = pwd_of({ block_id = ctx.block_id })
   return assert(rex.session.new_window{
     window_label = label,
     layout = rex.layout.block{
@@ -348,10 +366,8 @@ end
 rex.action{
   name  = "tab_new",
   title = "New Tab at End",
-  args  = { name = "string?", cwd = "string?" },
-  run   = function(ctx, args)
-    args = args or {}
-    show_tab(ctx, open_tab(ctx, args.name ~= "" and args.name or nil, args.cwd))
+  run   = function(ctx)
+    show_tab(ctx, open_tab(ctx))
   end,
 }
 
@@ -377,16 +393,18 @@ rex.action{
 }
 
 -- $1: the client to ask, $2: the cwd for the tab, $3: the pane to hand focus
--- back to. fzf exits 130 on Esc.
--- Creating goes back through the app (Remote Control) so it runs tab_new.
-local ask_tab_name = [[
-export PATH="$REX_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
+-- back to, $4: the session. fzf exits 130 on Esc.
+-- The tab is made here, on the pane's host: the actions in this file exist only
+-- on the Mac's server. Showing it goes through the app (Remote Control).
+local ask_tab_name = SH_PATH .. [[
 name=$(fzf --print-query --layout=reverse --prompt='new tab> ' \
   --header='enter: create (empty = unnamed)   esc: cancel' </dev/null)
 cancelled=$?
 rex focus "$3" 2>/dev/null
 [ $cancelled -eq 130 ] && exit 0
-rex -C "$1" do tab_new name="$name" cwd="$2" || read -r _
+w=$(rex window new -s "$4" --focus=false --json ${2:+-c "$2"} ${name:+"$name"} |
+  sed -n 's/.*"window_id": *"\([^"]*\)".*/\1/p' | head -n 1)
+[ -n "$w" ] && rex -C "$1" do session.select session_id="$4" window_id="$w" || read -r _
 ]]
 
 rex.action{
@@ -400,7 +418,7 @@ rex.action{
       layout    = rex.layout.block{
         flavor  = "com.superlogical.terminal.shell",
         options = { shell = "none", command = {
-          "/bin/sh", "-c", ask_tab_name, "sh", ctx.client_id or "", pwd_of({ block_id = ctx.block_id }), ctx.block_id,
+          "/bin/sh", "-c", ask_tab_name, "sh", app_client(ctx), pwd_of({ block_id = ctx.block_id }), ctx.block_id, ctx.session_id,
         } },
       },
     })

@@ -60,3 +60,5 @@ on PATH may be 5.x and will happily accept bash 4+ syntax that 3.2 rejects.
 - Confirming a change actually took effect, a long-running process still
   serving the config it read at startup, or a NixOS rebuild that succeeds
   without picking up an edit → `docs/verifying.md`
+- Changing Rex keys or actions (`modules/rex`) → `modules/rex/CLAUDE.md`:
+  every action must also work, fast, in a remote-host pane
