@@ -2,6 +2,9 @@
 # and contains the rustup proxies for cargo, rustc, rustfmt, and related tools.
 if set -q HOMEBREW_PREFIX
     fish_add_path --global --move --path "$HOMEBREW_PREFIX/opt/rustup/bin"
+    # ~/.local/bin stays ahead: it holds the huacnlee/cargo fork, which must win over
+    # rustup's cargo proxy (rustc, rustfmt and the toolchain still come from rustup).
+    fish_add_path --global --move --path "$HOME/.local/bin"
 end
 
 # fnm creates a per-shell path for the selected Node version. Do not export a

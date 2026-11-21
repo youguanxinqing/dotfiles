@@ -24,10 +24,14 @@ for entry in "${entries[@]}"; do
   clean_path="${clean_path:+$clean_path:}$entry"
 done
 PATH="$clean_path"
+# The huacnlee/cargo fork in ~/.local/bin wins even where rustup's proxy comes first on PATH
+# (shells started before the fish PATH fix of 2026-11-16).
+cargo_bin=cargo
+[ -x "$HOME/.local/bin/cargo" ] && cargo_bin="$HOME/.local/bin/cargo"
 
 top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$top" ] || [ ! -f "$top/.cargo-local" ] || [ ! -f "$top/Cargo.lock" ]; then
-  exec cargo "$@"
+  exec "$cargo_bin" "$@"
 fi
 
 # lock 里取自 git 的包：名字和锁定的提交。
@@ -60,7 +64,7 @@ while read -r checkout || [ -n "$checkout" ]; do
 done <"$top/.cargo-local"
 
 if [ "$count" -eq 0 ]; then
-  exec cargo "$@"
+  exec "$cargo_bin" "$@"
 fi
 [ -t 2 ] && echo "cargo-local: $count crates from $(paste -sd' ' "$top/.cargo-local")" >&2
 
@@ -68,17 +72,17 @@ config="paths=[$paths]"
 toolchain=()
 case "${1:-}" in +*) toolchain=("$1"); shift ;; esac
 case "${1:-}" in
-  '' | -*) exec cargo "${toolchain[@]+"${toolchain[@]}"}" --config "$config" "$@" ;;
+  '' | -*) exec "$cargo_bin" "${toolchain[@]+"${toolchain[@]}"}" --config "$config" "$@" ;;
   # 只有解析依赖的子命令要 --config；fmt、sweep 这类不认它，走到最后原样转。
   build | b | check | c | test | t | run | r | clippy | doc | d | bench | rustc | rustdoc | \
     tree | metadata | fetch | fix | update)
-    exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$1" --config "$config" "${@:2}" ;;
+    exec "$cargo_bin" "${toolchain[@]+"${toolchain[@]}"}" "$1" --config "$config" "${@:2}" ;;
   nextest)
     if [ $# -ge 2 ] && [ "${2#-}" = "$2" ]; then
-      exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$1" "$2" --config "$config" "${@:3}"
+      exec "$cargo_bin" "${toolchain[@]+"${toolchain[@]}"}" "$1" "$2" --config "$config" "${@:3}"
     fi
     # `cargo nextest --version` 这类不带子命令的：nextest 在那个位置不认 --config，也什么都不编。
-    exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$@"
+    exec "$cargo_bin" "${toolchain[@]+"${toolchain[@]}"}" "$@"
     ;;
 esac
-exec cargo "${toolchain[@]+"${toolchain[@]}"}" "$@"
+exec "$cargo_bin" "${toolchain[@]+"${toolchain[@]}"}" "$@"
