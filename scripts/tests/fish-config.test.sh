@@ -79,12 +79,12 @@ fi
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   '[[ "${1:-}" == --fish ]] || exit 2' \
-  'printf '\''%s\n'\'' '\''function fzf-history-widget; end'\'' '\''function fzf-file-widget; end'\'' '\''bind \\cr fzf-history-widget'\'' '\''bind \\ct fzf-file-widget'\''' \
+  'printf '\''%s\n'\'' '\''function fzf-history-widget; end'\'' '\''function fzf-file-widget; end'\'' '\''bind \cr fzf-history-widget'\'' '\''bind \ct fzf-file-widget'\''' \
   > "$TEST_BIN/fzf"
 chmod +x "$TEST_BIN/fzf"
 bindings="$(PATH="$TEST_BIN:$TEST_SYSTEM_PATH" FZF_BINDINGS="$FZF_BINDINGS" \
   "$FISH_BIN" --no-config -c \
-  'source "$FZF_BINDINGS"; fish_user_key_bindings; bind \\cr; bind \\ct; printf "FZF_CTRL_R_OPTS=%s\n" "$FZF_CTRL_R_OPTS"')"
+  'source "$FZF_BINDINGS"; fish_user_key_bindings; bind \cr; bind \ct; printf "FZF_CTRL_R_OPTS=%s\n" "$FZF_CTRL_R_OPTS"')"
 assert_contains "$bindings" 'fzf-history-widget'
 assert_contains "$bindings" 'fzf-file-widget'
 assert_contains "$bindings" 'FZF_CTRL_R_OPTS=--with-nth=1..'
@@ -113,14 +113,14 @@ ln -s "$ROOT/configs/fish" "$INTERACTIVE_CONFIG_ROOT/fish"
 printf '%s\n' \
   'function fish_prompt; echo vendor-prompt; end' \
   'function fish_right_prompt; echo vendor-right-prompt; end' \
-  'bind \\cr vendor-history' \
-  'bind --erase \\ct 2>/dev/null' \
+  'bind \cr vendor-history' \
+  'bind --erase \ct 2>/dev/null' \
   > "$INTERACTIVE_VENDOR_ROOT/fish/vendor_conf.d/omarchy-init.fish"
 
 interactive="$(HOME="$INTERACTIVE_HOME" XDG_CONFIG_HOME="$INTERACTIVE_CONFIG_ROOT" \
   XDG_DATA_DIRS="$INTERACTIVE_VENDOR_ROOT" PATH="$TEST_BIN:$TEST_SYSTEM_PATH" TERM=dumb \
   "$FISH_BIN" --interactive --command \
-  'fish_prompt; fish_right_prompt; bind \\cr; bind \\ct; functions fzf-history-widget')"
+  'fish_prompt; fish_right_prompt; bind \cr; bind \ct; functions fzf-history-widget')"
 assert_contains "$interactive" '@'
 assert_contains "$interactive" '<<<'
 assert_contains "$interactive" 'fzf-history-widget'
