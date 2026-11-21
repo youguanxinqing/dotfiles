@@ -563,3 +563,36 @@ rex.action{
   end,
 }
 rex.bind("ctrl+v", "remote_image_paste")
+
+-- ctrl+b G: worktree dialog (herdr's prefix+shift+g, herdr-worktree). Rex has no
+-- worktree concept, so rex-worktree does it with git: a worktree is a session
+-- named like bm names it (repo-branch), worktree-links provisions new ones, and
+-- dev.yml's two windows are laid out by hand (bootmux has no Rex backend).
+-- The float runs on the pane's host, so rex-worktree must be in ~/.local/bin there.
+local worktree = SH_PATH .. [[
+if command -v rex-worktree >/dev/null; then
+  exec bash "$(command -v rex-worktree)" "$@"
+else
+  echo "rex-worktree is not installed on this host"; read -r _
+fi
+]]
+
+rex.action{
+  name  = "worktree",
+  title = "Worktree: Open or Create…",
+  run   = function(ctx)
+    local pwd = pwd_of({ block_id = ctx.block_id })
+    assert(rex.session.new_layer{
+      window_id = window_of(ctx),
+      bounds    = { 0.15, 0.2, 0.7, 0.4 },
+      focus     = true,
+      layout    = rex.layout.block{
+        flavor  = "com.superlogical.terminal.shell",
+        options = { shell = "none", command = {
+          "/bin/sh", "-c", worktree, "sh", app_client(ctx), ctx.block_id, pwd,
+        } },
+      },
+    })
+  end,
+}
+rex.bind("ctrl+b>shift+g", "worktree")

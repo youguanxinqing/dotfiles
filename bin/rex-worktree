@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+#
+# herdr-worktree 的 Rex 版，ctrl+b G 的弹窗。fzf 输入既是过滤词又是新分支名：回车打开
+# 选中的 worktree（session 已在就切过去）或按输入建一个，ctrl-d 摘掉 checkout（分支保留）。
+#
+# Rex 没有 worktree 概念（没有 API，没有 worktree.created 事件），herdr 替我们做的三件事
+# 这里自己做：
+# - worktree ↔ workspace 的对应：Rex 里一个 worktree 就是一个 session，按 bm 的命名规则
+#   （repo-branch）认，名字对上就算「开着」。
+# - worktree.created 事件：建完直接调 worktree-links <path>。
+# - bootmux 布局：bootmux 没有 Rex backend，dev.yml 的两个 window 照抄在 layout() 里。
+#
+# usage: rex-worktree CLIENT ORIGIN_BLOCK CWD   (由 init.lua 的 worktree 动作在浮层里起)
+#        rex-worktree task BRANCH PROMPT_FILE  (rex-dispatch skill 用：建 worktree，在新 session
+#                                               里起 claude 跑这个 prompt，打印 JSON 后返回)
+set -euo pipefail
+
+PATH="$PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+me="${0##*/}"
+mode=dialog
+if [ "${1:-}" = task ]; then
+  [ "$#" -eq 3 ] && [ -r "$3" ] || { echo "usage: $me task BRANCH PROMPT_FILE" >&2; exit 2; }
+  mode=task task_branch="$2" prompt_file="$3" client='' origin='' cwd="$PWD"
+else
+  client="${1:-}" origin="${2:-}" cwd="${3:-$PWD}"
+fi
+
+fail() {
+  printf '%s: %s\n' "$me" "$1" >&2
+  [ ! -t 0 ] || read -r -n 1 -s -p 'press any key…' || true
+  exit 1
+}
+
+back() { [ -z "$origin" ] || rex focus "$origin" 2>/dev/null || true; }
+
+common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ||
+  fail "not inside a git repository: $cwd"
+case "$common" in */.git) repo_root="${common%/.git}" ;; *) repo_root="$common" ;; esac
+repo="${repo_root##*/}"
+
+# bm.fish 的命名：repo-branch，/ 换 -，超过 20 个字符时 repo 缩成各段首字母。
+session_name() {
+  local s="$repo-$1" abbr='' w
+  if [ "${#s}" -gt 20 ]; then
+    for w in ${repo//-/ }; do abbr+="${w:0:1}"; done
+    s="$abbr-$1"
+  fi
+  printf '%s' "${s//\//-}"
+}
+
+# label -> session_id，开着的 session 一次取全。bash 3.2 没有 declare -A，按行查。
+open_list="$(rex session ls --json | jq -r '.sessions[] | [.label // "", .session_id] | @tsv')"
+open_id() { printf '%s\n' "$open_list" | awk -F'\t' -v l="$1" 'l != "" && $1 == l { print $2; exit }'; }
+
+# 和 herdr-worktree 同一份 .worktree-links 清单；没写 worktree_dir 就沿用 herdr 的默认位置，
+# 两边建出来的 worktree 落在一起。
+worktree_dir() {
+  local manifest="$repo_root/.worktree-links" verb rel _rest
+  if [ -f "$manifest" ]; then
+    while read -r verb rel _rest || [ -n "$verb" ]; do
+      [ "$verb" = worktree_dir ] && [ -n "$rel" ] || continue
+      case "$rel" in /*) printf '%s' "$rel" ;; *) printf '%s/%s' "$repo_root" "$rel" ;; esac
+      return 0
+    done <"$manifest"
+  fi
+  printf '%s/.herdr/worktrees/%s' "$HOME" "$repo"
+}
+
+base_ref() {
+  local ref
+  [ -n "$(git -C "$repo_root" remote)" ] || return 0
+  ref="$(git -C "$repo_root" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master)"
+  git -C "$repo_root" fetch "${ref%%/*}" "${ref#*/}" >/dev/null 2>&1 || true
+  git -C "$repo_root" rev-parse --verify --quiet "$ref" >/dev/null && printf '%s' "$ref"
+}
+
+# dev.yml 的布局：main 跑 claude，server-log 跑 ok。命令是敲进 shell 的（tmuxinator 语义），
+# 程序退出后 shell 还在。
+layout() {
+  local path="$1" name="$2" branch="$3" made sid main log
+  made="$(rex new "$name" -c "$path" --window main --json)"
+  sid="$(jq -r '.session_id' <<<"$made")"
+  main="$(jq -r '.initial_windows[0].block_ids[0]' <<<"$made")"
+  log="$(rex window new -s "$sid" server-log -c "$path" --focus=false --json | jq -r '.block_ids[0]')"
+  rex send -s "$sid" -b "$main" 'claude'; rex send-key -s "$sid" -b "$main" enter
+  rex send -s "$sid" -b "$log" 'ok'; rex send-key -s "$sid" -b "$log" enter
+  group "$sid" "$name" "$branch"
+  printf '%s' "$sid"
+}
+
+# Rex 没有 session 分组，只有一个全局顺序：新 session 挪到同 repo 前缀的最后一个后面，
+# 侧栏里同一个仓库的 worktree 就挨在一起。
+group() {
+  local sid="$1" name="$2" branch="$3" prefix last
+  prefix="${name%"${branch//\//-}"}"
+  last="$(rex session ls --json | jq -r --arg p "$prefix" --arg me "$sid" \
+    '[.sessions[] | select(.session_id != $me and ((.label // "") | startswith($p)))] | last | .session_id // empty')"
+  [ -z "$last" ] || rex session move "$sid" --after "$last" >/dev/null 2>&1 || true
+}
+
+enter() {
+  local path="$1" branch="$2" name sid
+  name="$(session_name "$branch")"
+  sid="$(open_id "$name")"
+  [ -n "$sid" ] || sid="$(layout "$path" "$name" "$branch")"
+  back
+  rex -C "$client" do session.select session_id="$sid" || read -r _
+}
+
+# 建好 worktree 并补链，路径打到 stdout（其余输出都去 stderr）。
+add_worktree() {
+  local branch="$1" path base
+  [ -n "$branch" ] || fail "type a branch name first"
+  path="$(worktree_dir)/$branch"
+  base="$(base_ref || true)"
+  if git -C "$repo_root" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
+    git -C "$repo_root" worktree add "$path" "$branch" >/dev/null || fail "could not create worktree $branch"
+  else
+    git -C "$repo_root" worktree add -b "$branch" "$path" ${base:+"$base"} >/dev/null ||
+      fail "could not create worktree $branch"
+  fi
+  worktree-links "$path" >&2 || true
+  printf '%s' "$path"
+}
+
+create() {
+  local path
+  path="$(add_worktree "$1")" || exit 1
+  enter "$path" "$1"
+}
+
+# 一个任务一个 session：只有一个 window，直接跑 claude（不经 shell 敲，prompt 不用转义），
+# --keep-open 让人在 claude 退出后还能看到最后一屏。总结写进这个 worktree 自己的 git 目录，
+# 不会出现在 git status 里。发起方等这个文件出现就算交付。
+task() {
+  local branch="$1" name path dir summary prompt sid
+  name="$(session_name "$branch")"
+  [ -z "$(open_id "$name")" ] || fail "session $name already exists"
+  path="$(add_worktree "$branch")" || exit 1
+  dir="$(git -C "$path" rev-parse --absolute-git-dir)/claude-task"
+  mkdir -p "$dir"
+  summary="$dir/summary.md"
+  rm -f "$summary"
+  prompt="$(<"$prompt_file")
+
+---
+你在 git worktree ${path}（分支 ${branch}）里独立完成上面的任务，别人不会盯着你。
+完成时，或者遇到必须由人拍板的问题时，把给发起人看的总结写到 ${summary}：
+做了什么、为什么、怎么验证的（命令和结果）、遗留问题或需要决定的事。
+写这个文件是最后一步，写完它就算交付；不要 push，不要合并。"
+  sid="$(rex new "$name" -c "$path" --window task --keep-open --json -- claude "$prompt" |
+    jq -r '.session_id')"
+  group "$sid" "$name" "$branch"
+  jq -n --arg s "$sid" --arg n "$name" --arg p "$path" --arg b "$branch" --arg f "$summary" \
+    '{session_id: $s, session: $n, path: $p, branch: $b, summary: $f}'
+}
+
+[ "$mode" != task ] || { task "$task_branch"; exit 0; }
+
+ask() {
+  local a=''
+  printf '%s [y/N] ' "$1"; IFS= read -r -n 1 a || true; printf '\n'
+  [ "$a" = y ] || [ "$a" = Y ]
+}
+
+remove() {
+  local path="$1" branch="$2" sid
+  ask "remove worktree \"$branch\" (the branch is kept)?" || return 0
+  if ! git -C "$repo_root" worktree remove "$path" 2>/dev/null; then
+    ask "\"$branch\" is dirty or locked — force?" || return 0
+    git -C "$repo_root" worktree remove --force "$path" || { read -r -n 1 -s || true; return 0; }
+  fi
+  sid="$(open_id "$(session_name "$branch")")"
+  [ -z "$sid" ] || rex session kill "$sid" >/dev/null 2>&1 || true
+}
+
+rows() {
+  local path='' branch='' line first=1 mark
+  # porcelain 每个 worktree 一段、空行收尾，第一段是主 checkout，跳过。
+  while IFS= read -r line; do
+    case "$line" in
+      'worktree '*) path="${line#worktree }"; branch='' ;;
+      'branch '*) branch="${line#branch refs/heads/}" ;;
+      '')
+        if [ -n "$path" ] && [ -z "$first" ]; then
+          [ -n "$branch" ] || branch="${path##*/}"
+          mark=''; [ -z "$(open_id "$(session_name "$branch")")" ] || mark=' (open)'
+          printf '%-32s\t%s\t%s\t%s\n' "$branch$mark" \
+            "${path/#$HOME/\~}" "$path" "$branch"
+        fi
+        [ -z "$path" ] || first=''
+        path='' ;;
+    esac
+  done < <(git -C "$repo_root" worktree list --porcelain)
+}
+
+while :; do
+  out="$(rows | fzf --print-query --expect=ctrl-d \
+    --delimiter '\t' --with-nth 1,2 --nth 1 --layout=reverse --info=hidden --no-sort \
+    --prompt='worktree> ' --header='enter open/create · ctrl-d remove')" && st=0 || st=$?
+  [ "$st" -le 1 ] || { back; exit 0; }
+  { IFS= read -r query; IFS= read -r key; IFS= read -r sel; } <<<"$out" || true
+  IFS=$'\t' read -r _ _ path branch <<<"$sel" || true
+  if [ "$key" = ctrl-d ]; then
+    [ -z "$sel" ] || remove "$path" "$branch"
+    continue
+  fi
+  if [ -n "$sel" ]; then enter "$path" "$branch"; else create "$query"; fi
+  exit 0
+done
