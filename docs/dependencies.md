@@ -19,6 +19,17 @@ unit must also include `path = [ "%h/.local" ];`. Enable
 login environment. An already running service keeps its original PATH until
 it restarts.
 
+## rexume: Homebrew on macOS, a static build on NixOS
+
+`modules/rexume` installs it with Homebrew and runs `rexume install` from
+`post-install.sh`. NixOS gets the Linux static build from `nix/packages.nix`
+through Home Manager; after the first switch on a machine, run `rexume install`
+there once (it writes the agent hooks and `~/.config/systemd/user/rexume.service`,
+which Home Manager does not manage). Either way, Codex runs the new hook only
+after `/hooks` trusts `rexume report codex`. rexume records the `rexume` and
+`rex` paths it finds on `PATH` without resolving links, so profile paths
+(`/opt/homebrew/bin`, `~/.nix-profile/bin`) survive upgrades.
+
 ## Refs point at what upstream publishes, not at a commit
 
 Use a tag where one exists, the default branch otherwise. Pinning a commit only

@@ -85,6 +85,7 @@ in
       bootmux
       herdr
       keep
+      rexume
       staticcheck
     ])
   );

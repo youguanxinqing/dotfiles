@@ -81,3 +81,30 @@ in
 
   herdr = herdrPackage;
 }
+# rexume 只为 Linux 发静态 musl 二进制（macOS 走 Homebrew，见 modules/rexume），
+# 静态链接，不用 patchelf。升级：改 version 和两个 hash（取 release 里的 .sha256）。
+// pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+  rexume =
+    let
+      version = "0.1.26";
+      arch = pkgs.stdenv.hostPlatform.parsed.cpu.name;
+      hash = {
+        x86_64 = "sha256-gxldW88p+fHqaGJ1sCdjQa0qKa6ko5rabOM1nm1aKtM=";
+        aarch64 = "sha256-+5/vIzci/J0MTEumb7uGiAwjB6m7DZWGUh1Ftcor54s=";
+      }.${arch};
+    in
+    pkgs.stdenvNoCC.mkDerivation {
+      pname = "rexume";
+      inherit version;
+      src = pkgs.fetchurl {
+        url = "https://github.com/Entwining/rexume/releases/download/v${version}/rexume-${version}-${arch}-unknown-linux-musl.tar.gz";
+        inherit hash;
+      };
+      installPhase = ''
+        runHook preInstall
+        install -Dm755 bin/rexume "$out/bin/rexume"
+        install -Dm644 LICENSE "$out/share/licenses/rexume/LICENSE"
+        runHook postInstall
+      '';
+    };
+}
