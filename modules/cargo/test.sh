@@ -15,7 +15,10 @@ DEP="$TEST_ROOT/dep"
 mkdir -p "$STUB"
 printf '#!/bin/sh\necho "$@"\n' >"$STUB/cargo"
 chmod +x "$STUB/cargo"
-run() { (cd "$APP" && PATH="$WRAPPER_DIR:$STUB:$TEST_SYSTEM_PATH" cargo "$@" 2>/dev/null); }
+# HOME 隔离：包装器优先用 $HOME/.local/bin 里的 cargo fork，不隔离会调到本机真 cargo。
+FAKE_HOME="$TEST_ROOT/home"
+mkdir -p "$FAKE_HOME"
+run() { (cd "$APP" && HOME="$FAKE_HOME" PATH="$WRAPPER_DIR:$STUB:$TEST_SYSTEM_PATH" cargo "$@" 2>/dev/null); }
 
 mkdir -p "$APP" "$DEP/crates/dep" "$DEP/crates/other"
 git -c init.defaultBranch=main init -q "$APP"
@@ -48,4 +51,9 @@ want="paths=[\"$DEP/crates/dep\"]"
 [ "$(run b)" = "b --config $want" ] || die "alias: $(run b)"
 [ "$(run +nightly build)" = "+nightly build --config $want" ] || die "toolchain: $(run +nightly build)"
 [ "$(run --version)" = "--config $want --version" ] || die "flag first: $(run --version)"
+# ~/.local/bin 里有 fork 时，即使 PATH 上 rustup 的 cargo 排在前面，也要走 fork。
+mkdir -p "$FAKE_HOME/.local/bin"
+printf '#!/bin/sh\necho fork "$@"\n' >"$FAKE_HOME/.local/bin/cargo"
+chmod +x "$FAKE_HOME/.local/bin/cargo"
+[ "$(run --version)" = "fork --config $want --version" ] || die "fork not preferred: $(run --version)"
 echo ok
