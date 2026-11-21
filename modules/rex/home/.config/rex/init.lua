@@ -338,12 +338,14 @@ fi
 rex focus "$1" 2>/dev/null
 ]]
 
--- The last n lines of a capture: the screen, without the scrollback before it.
+-- The last n rows of a vt capture: the screen, without the scrollback before
+-- it. vt separates rows with \r\n and doesn't end the last one; unlike text, it
+-- keeps the blank rows at the bottom of the screen.
 local function last_rows(text, n)
-  local ends = {}
-  for i in text:gmatch("()\n") do ends[#ends + 1] = i end
-  if ends[#ends] ~= #text then ends[#ends + 1] = #text + 1 end
-  return text:sub((ends[#ends - n] or 0) + 1)
+  local nl = {}
+  for i in text:gmatch("()\n") do nl[#nl + 1] = i end
+  local cut = nl[#nl - n + 1]
+  return cut and text:sub(cut + 1) or text
 end
 
 -- Where a block sits in its window, in window fractions. A zoomed block fills
@@ -376,7 +378,7 @@ rex.action{
     -- captures it there. Past ~960 KiB format fails, and the float captures too.
     local screen = ""
     if not ctx.server then
-      local f = rex.block.call(terminal, "format", { block_id = ctx.block_id })
+      local f = rex.block.call(terminal, "format", { block_id = ctx.block_id, format = "vt" })
       if f and f.content and not f.id then screen = last_rows(f.content, size.rows) end
     end
     assert(rex.session.new_layer{
