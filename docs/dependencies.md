@@ -30,6 +30,24 @@ after `/hooks` trusts `rexume report codex`. rexume records the `rexume` and
 `rex` paths it finds on `PATH` without resolving links, so profile paths
 (`/opt/homebrew/bin`, `~/.nix-profile/bin`) survive upgrades.
 
+## Pi plugins on NixOS
+
+The Home Manager adapter installs `pi-knowledge` and `pi-open-tui` under
+`~/.pi/agent/nix-packages` and links the module's `/clear` extension. Activation
+reconciles only these package declarations in Pi's writable settings, preserving
+other packages, resource filters, model preferences, and credentials.
+
+`nix/packages.nix` pins the UI extension tarball.
+`nix/pi-knowledge/package.json` pins the knowledge extension; its lockfile and
+Nix dependency hash make the native SQLite, parser, and CPU ONNX dependencies
+reproducible. An npm override selects `better-sqlite3` 13.0.3: the upstream
+extension's 12.x dependency can abort under Node 24's cleanup hooks; version 13
+uses N-API. Native addons are built or patched for NixOS rather than installed
+with npm during activation. Model caches and knowledge databases stay outside
+the repository, under Pi's data directory.
+The portable module also declares `nowledge-mem-pi` for macOS; it is not
+packaged for Nix.
+
 ## Refs point at what upstream publishes, not at a commit
 
 Use a tag where one exists, the default branch otherwise. Pinning a commit only

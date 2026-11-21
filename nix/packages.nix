@@ -9,6 +9,8 @@ let
     };
 in
 {
+  pi-knowledge = pkgs.callPackage ./pi-knowledge { };
+
   # This release has no runtime dependencies; Pi provides its peer modules.
   pi-open-tui = pkgs.fetchzip {
     name = "pi-open-tui-0.3.13";

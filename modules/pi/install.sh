@@ -4,8 +4,8 @@
 # ~/.pi/agent/npm，两样都是运行时状态，不进仓库。这里只保证「这些包被声明了」——
 # settings.json 里已声明但还没装的包，pi 下次启动会自己补装。
 #
-# NixOS 不走这里：nix/home.nix 把 pi-open-tui 钉在 nix store 里，由 pi-settings.py
-# 把 settings.json 里的 npm:pi-open-tui 改写成本地路径。两边别同时管一台机器。
+# NixOS 不走这里：nix/home.nix 把这两个包安装到 nix store，由 pi-settings.py
+# 把 settings.json 里的 npm 声明改写成本地路径。两边别同时管一台机器。
 
 set -euo pipefail
 

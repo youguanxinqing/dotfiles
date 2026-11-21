@@ -1,0 +1,13 @@
+{
+  "name": "pi-knowledge-runtime",
+  "version": "0.15.0",
+  "private": true,
+  "dependencies": {
+    "pi-knowledge": "0.15.0"
+  },
+  "overrides": {
+    "pi-knowledge": {
+      "better-sqlite3": "13.0.3"
+    }
+  }
+}

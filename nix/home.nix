@@ -5,7 +5,7 @@
 let
   dotfilesPackages = self.packages.${pkgs.stdenv.hostPlatform.system};
   piPackages = {
-    inherit (dotfilesPackages) pi-open-tui;
+    inherit (dotfilesPackages) pi-knowledge pi-open-tui;
   };
   piPackageRoot = "${config.home.homeDirectory}/.pi/agent/nix-packages";
   piPackageManifest = pkgs.writeText "pi-packages.json" (builtins.toJSON {
@@ -144,6 +144,9 @@ in
   home.file = lib.mapAttrs' (name: source:
     lib.nameValuePair ".pi/agent/nix-packages/${name}" { inherit source; }
   ) piPackages // {
+    ".pi/agent/extensions/clear.ts".source =
+      ../modules/pi/home/.pi/agent/extensions/clear.ts;
+
     # Link tracked helpers while preserving unrelated local executables.
     ".local/bin" = {
       source = self.outPath + "/bin";
