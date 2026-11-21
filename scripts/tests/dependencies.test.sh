@@ -73,6 +73,20 @@ PATH="$SOURCE_WRONG_BIN:$SOURCE_BREW_BIN:$TEST_SYSTEM_PATH" HOME="$SOURCE_HOME" 
   "$ROOT/scripts/install-deps.sh" "$SOURCE_ROOT/normalized.manifest"
 grep -Fqx 'install demo' "$SOURCE_LOG"
 
+# A formula from a third-party tap gets its tap added first (Homebrew 6 requires it).
+printf 'all | tapped | tapped | brew | owner/tap/tapped\n' > "$SOURCE_ROOT/tapped.manifest"
+printf 'all | plain | plain | brew | plain\n' > "$SOURCE_ROOT/plain.manifest"
+TAP_OUT="$(PATH="$SOURCE_BREW_BIN:$TEST_SYSTEM_PATH" HOME="$SOURCE_HOME" \
+  BREW_SOURCE_BIN="$SOURCE_BREW_BIN" BREW_SOURCE_CELLAR="$SOURCE_CELLAR" BREW_SOURCE_LOG="$SOURCE_LOG" \
+  "$ROOT/scripts/install-deps.sh" --dry-run "$SOURCE_ROOT/tapped.manifest")"
+printf '%s\n' "$TAP_OUT" | grep -A1 -Fx "+ $SOURCE_BREW_BIN/brew tap owner/tap " |
+  grep -Fqx "+ $SOURCE_BREW_BIN/brew install owner/tap/tapped " ||
+  die "A tapped formula was installed without adding its tap first: $TAP_OUT"
+if PATH="$SOURCE_BREW_BIN:$TEST_SYSTEM_PATH" HOME="$SOURCE_HOME" BREW_SOURCE_BIN="$SOURCE_BREW_BIN" \
+  "$ROOT/scripts/install-deps.sh" --dry-run "$SOURCE_ROOT/plain.manifest" | grep -Fq ' tap '; then
+  die "A core formula ran brew tap."
+fi
+
 # A module-local script can implement an arbitrary lifecycle without a central adapter edit.
 SCRIPT_ROOT="$TEST_ROOT/script-repo"
 SCRIPT_HOME="$TEST_ROOT/script-home"

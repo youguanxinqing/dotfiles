@@ -228,6 +228,10 @@ install_cli() {
   case "$CLI_INSTALLER" in
     brew)
       [[ -n "${BREW:-}" ]] || { echo "Homebrew is required to install $CLI_ID." >&2; return 1; }
+      # Homebrew 6 refuses owner/tap/formula until that tap is added by hand.
+      if [[ "$CLI_SOURCE" == */*/* ]]; then
+        run "$BREW" tap "${CLI_SOURCE%/*}"
+      fi
       run "$BREW" install "$CLI_SOURCE"
       ;;
     brew-cask)
