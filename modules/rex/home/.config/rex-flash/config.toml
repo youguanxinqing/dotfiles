@@ -1,0 +1,8 @@
+# rex-flash reads herdr-flash's config format from here.
+#
+# The default cursor is a white block, which vanishes on a light theme (Glacier Mint's
+# background is #f0f9f6). Rex switches between a light and a dark theme, so the cursor needs a
+# mid-luminance color: this orange contrasts about 3.8:1 with both #f0f9f6 and One Dark's
+# #21252b, and stays apart from the blue matches, magenta labels and purple selection.
+[colors]
+cursor = { fg = "#ffffff", bg = "#e8590c", bold = true }
