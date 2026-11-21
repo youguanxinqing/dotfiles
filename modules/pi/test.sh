@@ -7,7 +7,7 @@ source "${DOTFILES_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd 
 new_test_root
 
 # 公开仓库：models.json 只能描述模型，密钥必须留在 auth.json。
-if grep -Fq '"apiKey"' "$ROOT/modules/pi/home/.pi/agent/models.json"; then
+if grep -Fq '"apiKey"' "$ROOT/modules/pi/models.json"; then
   die "Pi models.json carries an apiKey; keep credentials in ~/.pi/agent/auth.json."
 fi
 
@@ -53,3 +53,13 @@ assert_link "$LINK_HOME/.pi/agent/extensions/clear.ts" "$CLEAR_SOURCE"
 # 文件存在还不够：它必须还注册着 /clear 这个名字，重命名不能悄悄发生。
 grep -Fq 'registerCommand("clear"' "$CLEAR_SOURCE" ||
   die "The Pi clear extension no longer registers /clear."
+
+# models.json 是种子：缺失时 post-links 放一份，已有的（本机代理写过的）绝不覆盖。
+HOME="$LINK_HOME" bash "$ROOT/modules/pi/post-links.sh" >/dev/null
+cmp -s "$LINK_HOME/.pi/agent/models.json" "$ROOT/modules/pi/models.json" ||
+  die "Pi post-links did not seed models.json."
+[ ! -L "$LINK_HOME/.pi/agent/models.json" ] || die "Pi models.json must be a file, not a link."
+echo '{"local":true}' > "$LINK_HOME/.pi/agent/models.json"
+HOME="$LINK_HOME" bash "$ROOT/modules/pi/post-links.sh" >/dev/null
+[ "$(cat "$LINK_HOME/.pi/agent/models.json")" = '{"local":true}' ] ||
+  die "Pi post-links overwrote an existing models.json."
