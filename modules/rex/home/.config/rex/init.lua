@@ -34,7 +34,9 @@ rex.bind("ctrl+b>l", "pane.focus.right")
 --   active window, not the view), so the picker must switch through the client
 --   action session.select -- from the CLI, which needs Remote Control on.
 -- * The tab list is built by the picker, on the pane's own host, with
---   `rex do -e`. In a pane on another host the action itself runs here on the
+--   `rex do -e`, run once against that host's server and once per other
+--   machine by Tailscale endpoint (`rex -S URL`), all at once, so a slow or
+--   offline machine delays only its own rows. In a pane on another host the action itself runs here on the
 --   Mac (see remote_image_paste), and each of its calls there is a round trip
 --   through the app; listing tabs from here took one per tab, and was slow.
 --   The picker reaches the app through app_client.
@@ -59,19 +61,27 @@ local SH_PATH = [[
 export PATH="$REX_BIN_DIR:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/etc/profiles/per-user/$USER/bin:$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
 ]]
 
--- The app, for `rex -C` in a floating pane on the pane's host. In a remote pane
--- ctx.client_id is the Mac server's ID, which that host doesn't know, so the
--- app's label stands in. rex.exec runs here on the Mac, so its rex talks to
+-- Prefix for a rex.exec script that runs the Mac's own rex as "$bin/rex".
+local MAC_REX = [[
+export HOME=${HOME:-$MAC_HOME}
+bin=${REX_BIN_DIR:-"$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS"}
+]]
+
+-- The app, for `rex -C` in a floating pane on the pane's host. ctx.client_id
+-- is the Mac server's ID, which other machines don't know, so the app's label
+-- stands in -- for a local pane too, since the tab picker selects through
+-- other machines' servers. rex.exec runs here on the Mac, so its rex talks to
 -- the Mac's server; a key's action gets neither REX_BIN_DIR nor HOME (only
 -- `rex do` passes them), so fall back to where the app installs the server.
+local app_labels = {}
 local function app_client(ctx)
-  if not ctx.server then return ctx.client_id or "" end
-  local r = rex.exec{ "/bin/sh", "-c", [[
-    export HOME=${HOME:-$2}
-    bin=${REX_BIN_DIR:-"$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS"}
-    "$bin/rex" client inspect "$1" | sed -n 's/^label: *//p']], "sh", ctx.client_id or "", os.getenv("HOME") }
+  local id = ctx.client_id or ""
+  if app_labels[id] then return app_labels[id] end
+  local r = rex.exec{ "/usr/bin/env", "MAC_HOME=" .. (os.getenv("HOME") or ""), "/bin/sh", "-c", MAC_REX .. [[
+    "$bin/rex" client inspect "$1" | sed -n 's/^label: *//p']], "sh", ctx.client_id or "" }
   local label = r.ok and r.stdout:gsub("%s+$", "") or ""
   assert(label ~= "", "no label for app client " .. tostring(ctx.client_id) .. ": " .. r.stderr)
+  app_labels[id] = label
   return label
 end
 
@@ -83,7 +93,8 @@ end
 
 -- A renamed tab shows its name. An unnamed one keeps the default label made from
 -- its ID ("Window 8762a745") and shows its focused pane's title instead.
--- Prints one row per tab; CURRENT is replaced by the window the key came from.
+-- Prints one row per tab; CURRENT is replaced by the window the key came from,
+-- and HOST is a placeholder the picker fills with the machine's name.
 local TAB_ROWS = [==[
 local terminal, current, home = "com.superlogical.terminal", "CURRENT", os.getenv("HOME")
 -- A session's windows are readable only on a stream attached to it.
@@ -98,7 +109,7 @@ for _, s in ipairs(assert(rex.call("session.attach_all", { event_scope = "sessio
     local pwd = url:gsub("^file://[^/]*", ""):gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
     if pwd:sub(1, #home) == home then pwd = "~" .. pwd:sub(#home + 1) end
     print(table.concat({
-      s.session_id, w.window_id, (w.window_id == current and "*" or " ") .. i, s.label or "", title, pwd,
+      s.session_id, w.window_id, "HOST", (w.window_id == current and "*" or " ") .. i, s.label or "", title, pwd,
     }, "\t"))
   end
 end
@@ -108,22 +119,79 @@ end
 -- window -- the newest, not the one focused before. So each floating prompt
 -- below hands focus back to the pane it came from ($3) before it exits.
 --
--- Fields 1-2 are the IDs: hidden from fzf, then cut back out of its pick.
+-- One rex per machine stays connected while fzf runs: it prints that
+-- machine's tabs, then waits on its FIFO for the pick and selects over the
+-- same connection. A fresh `rex -S` to select would cost another TLS
+-- handshake, about 150 ms over Tailscale. Closing a FIFO without a pick lets
+-- its rex exit. Field 1 is the machine's number (its FIFO is fd 3 + number),
+-- fields 2-3 the IDs: hidden from fzf, then cut back out of its pick. awk
+-- flushes each row so rows from different machines never interleave mid-line.
 -- A failed select (Remote Control off) keeps its error on screen until Enter.
-local picker = SH_PATH .. [[
-pick=$(rex do -e "$1" | fzf --delimiter='\t' --with-nth=3.. --layout=reverse --prompt='tab> ')
-rex focus "$3" 2>/dev/null
-[ -n "$pick" ] || exit 0
-s=$(printf '%s\n' "$pick" | cut -f1)
-w=$(printf '%s\n' "$pick" | cut -f2)
-rex -C "$2" do session.select session_id="$s" window_id="$w" || read -r _
-]]
+-- $1: rows script, $2: client, $3: pane, $4: this host's name, $5: other
+-- machines, one "name endpoint" per line.
+local picker = SH_PATH .. [=[
+d=$(mktemp -d) || exit 1
+trap 'rm -rf "$d"' EXIT
+mkfifo "$d/rows" || exit 1
+script="$1
+local s, w = (io.read() or ''):match('^(%S+) (%S+)$')
+if s then rex.client.queue('session.select', { session_id = s, window_id = w }) end"
+client=$2
+n=0
+# A helper must not inherit any FIFO's write end, its own included, or no rex
+# ever reads end of input; $closes drops them all.
+closes=
+start() { # $1: endpoint (empty for this host), $2: name
+  mkfifo "$d/$n" && eval "exec $((n + 3))<>\"\$d/$n\""
+  closes="$closes $((n + 3))>&-"
+  eval "{
+    rex \${1:+-S \"\$1\"} --timeout 3s -C \"\$client\" do -e \"\$script\" <\"\$d/$n\" 2>\"\$d/err$n\" |
+      awk -F'\t' -v OFS='\t' -v n=$n -v h=\"\$2\" '{ \$3 = h; print n, \$0; fflush() }' >\"\$d/rows\"
+  } $closes &"
+  n=$((n + 1))
+}
+start "" "$4"
+eval "$(printf '%s\n' "$5" | while read -r name ep; do
+  [ -n "$ep" ] && printf 'start %s %s\n' "$ep" "$name"
+done)"
+pick=$(fzf --delimiter='\t' --with-nth=4.. --layout=reverse --prompt='tab> ' <"$d/rows")
+rex focus "$3" 2>/dev/null &
+if [ -n "$pick" ]; then
+  m=$(printf '%s\n' "$pick" | cut -f1)
+  printf '%s %s\n' "$(printf '%s\n' "$pick" | cut -f2)" "$(printf '%s\n' "$pick" | cut -f3)" >"$d/pick"
+  eval "cat \"\$d/pick\" >&$((m + 3))"
+fi
+i=0
+while [ $i -lt $n ]; do eval "exec $((i + 3))>&-"; i=$((i + 1)); done
+wait
+[ -n "$pick" ] && [ -s "$d/err$m" ] && { cat "$d/err$m"; read -r _; }
+exit 0
+]=]
+
+-- "name endpoint" lines for every machine, this Mac ("mac") included, read
+-- once per config load from the Mac's rex. Tailscale endpoints, because a
+-- remote host's rex has no host list of its own.
+local machines
+local function machine_list()
+  if machines then return machines end
+  local r = rex.exec{ "/usr/bin/env", "MAC_HOME=" .. (os.getenv("HOME") or ""), "/bin/sh", "-c", MAC_REX .. [[
+    printf 'mac %s\n' "$("$bin/rex" server status | sed -n 's/^  https: *//p')"
+    "$bin/rex" hosts | awk 'NR > 1 { sub(/,.*/, "", $2); print $1, $2 }']] }
+  assert(r.ok, "machine_list: " .. r.stderr)
+  machines = r.stdout
+  return machines
+end
 
 rex.action{
   name  = "tab_jump",
   title = "Jump to Tab…",
   run   = function(ctx)
     local here, client = window_of(ctx), app_client(ctx)
+    local this = ctx.server or "mac"
+    local others = {}
+    for line in machine_list():gmatch("[^\n]+") do
+      if line:match("^%S+") ~= this then others[#others + 1] = line end
+    end
     assert(rex.session.new_layer{
       window_id = here,
       bounds    = { 0.2, 0.15, 0.6, 0.5 },
@@ -132,6 +200,7 @@ rex.action{
         flavor  = "com.superlogical.terminal.shell",
         options = { shell = "none", command = {
           "/bin/sh", "-c", picker, "sh", (TAB_ROWS:gsub("CURRENT", here)), client, ctx.block_id,
+          this, table.concat(others, "\n"),
         } },
       },
     })
@@ -400,11 +469,10 @@ rex.bind("ctrl+b>s", "flash")
 
 -- New tabs, after herdr-smart-tab. Each opens in the current pane's directory
 -- and is shown once it is in place.
---   ctrl+b c  at the end, unnamed (tmux c).
 --   ctrl+b a  right after this tab, in its group (tmux a). Tabs sharing a base
 --             name are numbered in tab order: zsh, zshⅱ, zshⅲ. An unnamed tab
 --             has no group, so the new one stays unnamed too.
---   cmd+t     at the end, named first in a floating prompt. Esc cancels; an
+--   ctrl+b c / cmd+t  at the end, named first in a floating prompt. Esc cancels; an
 --             empty name makes an unnamed tab.
 local SUFFIX = { "", "ⅱ", "ⅲ", "ⅳ", "ⅴ", "ⅵ", "ⅶ", "ⅷ", "ⅸ", "ⅹ", "ⅺ", "ⅻ" }
 
@@ -440,8 +508,16 @@ local function open_tab(ctx, label)
 end
 
 -- The app ignores the server's active window; only a client action moves it.
+-- A queued client action resolves its session on the Mac's server, so a remote
+-- pane's session is "not found" there: ask the pane's host to do the select.
 local function show_tab(ctx, window_id)
-  rex.client.queue("session.select", { session_id = ctx.session_id, window_id = window_id })
+  if not ctx.server then
+    return rex.client.queue("session.select", { session_id = ctx.session_id, window_id = window_id })
+  end
+  local r = rex.exec{ "/usr/bin/env", "MAC_HOME=" .. (os.getenv("HOME") or ""), "/bin/sh", "-c", MAC_REX .. [[
+    "$bin/rex" -S "$1" -C "$2" do session.select session_id="$3" window_id="$4"]],
+    "sh", ctx.server, app_client(ctx), ctx.session_id, window_id }
+  assert(r.ok, "show_tab: " .. r.stderr)
 end
 
 rex.action{
@@ -506,7 +582,7 @@ rex.action{
   end,
 }
 
-rex.bind("ctrl+b>c", "tab_new")
+rex.bind("ctrl+b>c", "tab_new_named")
 rex.bind("ctrl+b>a", "tab_new_after")
 rex.bind("cmd+t", "tab_new_named")
 
