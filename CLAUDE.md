@@ -51,6 +51,24 @@ macOS's `/bin/bash` 3.2. `scripts/test-install.sh` automatically discovers every
 Git-visible shell script and runs an extra `/bin/bash -n` pass, because the bash
 on PATH may be 5.x and will happily accept bash 4+ syntax that 3.2 rejects.
 
+## Every feature: all three machines, fast, without being asked
+
+The user works on this Mac, the Air, and NixOS at once. "Add X" means X works
+from a pane or shell on any of them and feels instant. Both are part of done,
+not follow-ups to wait for the user to report.
+
+- **Cross-machine.** Before writing code, decide how the feature behaves when
+  it starts on another host and when its target is on another host (a tab, a
+  session, a file there). Test both on nixos or the Air, in the minimal
+  environment a script really gets there, not only on the Mac.
+- **Performance.** Time each step the user feels (key → something visible,
+  Enter → result) with real numbers before handing it over. Count network
+  round trips and fresh connections: a new `rex -S` or ssh connection over
+  Tailscale costs 100–300 ms though the round trip is 10 ms. Reuse
+  connections, run independent calls in parallel, cache what doesn't change,
+  and show local results before remote ones arrive.
+- Put both in the report: where it was tested, and the timings.
+
 ## Load on demand
 
 - Changing directory structure, module links, or module discovery →
